@@ -15,12 +15,15 @@ import {
   setEpisodesWatched,
   statusAfterProgress,
 } from '../lib/episodes'
+import { recordCompletion } from '../lib/history'
 import { supabase } from '../lib/supabase'
-import { formatRating, MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
+import { formatRating, MEDIA_LABELS, PRIORITY_LABELS, STATUS_LABELS, type Priority, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 
 type TypeFilter = MediaType | 'all'
 type StatusFilter = WatchStatus | 'all'
 type SortKey = keyof typeof SORTS
+
+const PRIORITY_DOT: Record<Priority, string> = { 1: 'bg-rose-400', 2: 'bg-sky-400', 3: 'bg-slate-400' }
 
 const SORTS = {
   recent: { label: 'Laatst bijgewerkt', compare: (a: WatchlistItem, b: WatchlistItem) => b.updated_at.localeCompare(a.updated_at) },
@@ -28,6 +31,11 @@ const SORTS = {
   title: { label: 'Titel (A–Z)', compare: (a: WatchlistItem, b: WatchlistItem) => a.title.localeCompare(b.title, 'nl') },
   rating: { label: 'Hoogste cijfer', compare: (a: WatchlistItem, b: WatchlistItem) => (b.rating ?? 0) - (a.rating ?? 0) },
   year: { label: 'Nieuwste eerst', compare: (a: WatchlistItem, b: WatchlistItem) => (b.year ?? 0) - (a.year ?? 0) },
+  priority: {
+    label: 'Prioriteit',
+    compare: (a: WatchlistItem, b: WatchlistItem) =>
+      (a.priority ?? 4) - (b.priority ?? 4) || b.created_at.localeCompare(a.created_at),
+  },
 }
 
 export default function Watchlist() {
@@ -38,7 +46,10 @@ export default function Watchlist() {
   const [params, setParams] = useSearchParams()
   const typeFilter = (params.get('soort') ?? 'all') as TypeFilter
   const statusFilter = (params.get('status') ?? 'all') as StatusFilter
-  const sort = (params.get('sorteer') && params.get('sorteer')! in SORTS ? params.get('sorteer') : 'recent') as SortKey
+  // De Wil ik zien-lijst staat standaard op prioriteit
+  const defaultSort: SortKey = statusFilter === 'plan_to_watch' ? 'priority' : 'recent'
+  const sort = (params.get('sorteer') && params.get('sorteer')! in SORTS ? params.get('sorteer') : defaultSort) as SortKey
+  const tagFilter = params.get('label') ?? 'all'
   const text = params.get('zoek') ?? ''
 
   function setParam(key: string, value: string, defaultValue: string) {
@@ -48,6 +59,14 @@ export default function Watchlist() {
     setParams(next, { replace: true })
   }
   const [watched, setWatched] = useState<Map<string, Set<string>>>(new Map())
+
+  // Nieuwe afleveringen en uitzenddata ophalen voor series die je volgt (één voor één, i.v.m. limieten van Jikan)
+  async function refreshInBackground(loaded: WatchlistItem[], map: Map<string, Set<string>>) {
+    for (const item of loaded.filter(needsRefresh).slice(0, 15)) {
+      const changes = await refreshShowInfo(item, map.get(item.id) ?? new Set()).catch(() => null)
+      if (changes) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...changes } : i)))
+    }
+  }
 
   useEffect(() => {
     supabase
@@ -72,14 +91,6 @@ export default function Watchlist() {
       })
   }, [])
 
-  // Nieuwe afleveringen en uitzenddata ophalen voor series die je volgt (één voor één, i.v.m. limieten van Jikan)
-  async function refreshInBackground(loaded: WatchlistItem[], map: Map<string, Set<string>>) {
-    for (const item of loaded.filter(needsRefresh).slice(0, 15)) {
-      const changes = await refreshShowInfo(item, map.get(item.id) ?? new Set()).catch(() => null)
-      if (changes) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...changes } : i)))
-    }
-  }
-
   const inProgress = useMemo(
     () => items.filter((i) => i.status === 'watching' && hasEpisodes(i) && i.seasons?.length),
     [items],
@@ -96,6 +107,7 @@ export default function Watchlist() {
       const status = statusAfterProgress(item, countWatched(item.seasons, updated))
       if (status !== item.status) {
         await supabase.from('watchlist_items').update({ status }).eq('id', item.id)
+        if (status === 'completed') await recordCompletion(item.id).catch(() => {})
         setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)))
       }
     } catch (e) {
@@ -111,10 +123,13 @@ export default function Watchlist() {
         (i) =>
           (typeFilter === 'all' || i.media_type === typeFilter) &&
           (statusFilter === 'all' || i.status === statusFilter) &&
+          (tagFilter === 'all' || (i.tags ?? []).includes(tagFilter)) &&
           (!needle || `${i.title} ${i.original_title ?? ''}`.toLocaleLowerCase('nl').includes(needle)),
       )
       .sort(SORTS[sort].compare)
-  }, [items, typeFilter, statusFilter, sort, text])
+  }, [items, typeFilter, statusFilter, tagFilter, sort, text])
+
+  const allTags = useMemo(() => [...new Set(items.flatMap((i) => i.tags ?? []))].sort(), [items])
 
   const filtered = visible.length !== items.length
 
@@ -132,13 +147,13 @@ export default function Watchlist() {
       <Upcoming items={items} />
 
       {items.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex">
+        <div className={`grid grid-cols-2 gap-2 lg:flex ${allTags.length ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
           <input
             type="search"
             value={text}
             onChange={(e) => setParam('zoek', e.target.value, '')}
             placeholder="Zoek in je lijst…"
-            className="col-span-2 min-w-0 rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent sm:col-span-3 lg:flex-1"
+            className="col-span-full min-w-0 rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent lg:flex-1"
           />
           <Select
             value={typeFilter}
@@ -150,11 +165,18 @@ export default function Watchlist() {
             onChange={(v) => setParam('status', v, 'all')}
             options={[['all', 'Elke status'], ...Object.entries(STATUS_LABELS)]}
           />
+          {allTags.length > 0 && (
+            <Select
+              value={tagFilter}
+              onChange={(v) => setParam('label', v, 'all')}
+              options={[['all', 'Alle labels'], ...allTags.map((t): [string, string] => [t, t])]}
+            />
+          )}
           <Select
             value={sort}
-            onChange={(v) => setParam('sorteer', v, 'recent')}
+            onChange={(v) => setParam('sorteer', v, defaultSort)}
             options={Object.entries(SORTS).map(([key, { label }]) => [key, label])}
-            className="col-span-2 sm:col-span-1"
+            className={allTags.length ? '' : 'col-span-2 sm:col-span-1'}
           />
         </div>
       )}
@@ -202,7 +224,15 @@ export default function Watchlist() {
                     />
                   )}
                   <div className="flex items-center justify-between pt-1 text-xs">
-                    <span className="text-muted">{STATUS_LABELS[item.status]}</span>
+                    <span className="flex items-center gap-1.5 text-muted">
+                      {item.status === 'plan_to_watch' && item.priority && (
+                        <span
+                          className={`size-2 rounded-full ${PRIORITY_DOT[item.priority]}`}
+                          title={`Prioriteit: ${PRIORITY_LABELS[item.priority]}`}
+                        />
+                      )}
+                      {STATUS_LABELS[item.status]}
+                    </span>
                     {item.rating && <span className="font-semibold text-amber-400">★ {formatRating(item.rating)}</span>}
                   </div>
                 </div>

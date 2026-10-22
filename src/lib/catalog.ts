@@ -26,7 +26,7 @@ export async function tmdb<T>(path: string, params: Record<string, string> = {})
   return res.json()
 }
 
-interface TmdbSearchItem {
+export interface TmdbSearchItem {
   id: number
   media_type: string
   title?: string
@@ -41,7 +41,11 @@ interface TmdbSearchItem {
 
 export async function searchTmdb(query: string): Promise<CatalogResult[]> {
   const data = await tmdb<{ results: TmdbSearchItem[] }>('search/multi', { query, include_adult: 'false' })
-  return data.results
+  return mapTmdbResults(data.results)
+}
+
+export function mapTmdbResults(results: TmdbSearchItem[]): CatalogResult[] {
+  return results
     .filter((r) => r.media_type === 'movie' || r.media_type === 'tv')
     .map((r) => {
       const title = r.title ?? r.name ?? ''
@@ -103,7 +107,13 @@ export async function searchJikan(query: string): Promise<CatalogResult[]> {
 // Extra gegevens die niet in de zoekresultaten zitten, zoals de IMDb-ID en het aantal afleveringen.
 export async function fetchExtraDetails(result: CatalogResult) {
   if (result.source === 'jikan') {
-    return { imdb_id: null, total_episodes: result.total_episodes, seasons: animeSeasons(result.total_episodes) }
+    let episodes = result.total_episodes
+    // Aanbevelingen van Jikan bevatten geen aantal afleveringen; dan halen we dat los op
+    if (episodes === null) {
+      const res = await fetch(`${JIKAN}/anime/${result.external_id}`)
+      if (res.ok) episodes = (await res.json()).data?.episodes ?? null
+    }
+    return { imdb_id: null, total_episodes: episodes, seasons: animeSeasons(episodes) }
   }
   if (result.media_type === 'movie') {
     const movie = await tmdb<{ imdb_id: string | null }>(`movie/${result.external_id}`)

@@ -2,15 +2,16 @@ import { Link } from 'react-router-dom'
 import { describeNextAir } from '../lib/episodes'
 import type { WatchlistItem } from '../lib/types'
 
+const TODAY = new Date().toISOString().slice(0, 10)
+
 // Lopende series en anime die je volgt, met de eerstvolgende uitzending
 export default function Upcoming({ items }: { items: WatchlistItem[] }) {
-  const today = new Date().toISOString().slice(0, 10)
   const upcoming = items
     .filter(
       (i) =>
         i.next_air &&
         ['watching', 'completed', 'on_hold'].includes(i.status) &&
-        (i.next_air.air_date === null || i.next_air.air_date >= today),
+        (i.next_air.air_date === null || i.next_air.air_date >= TODAY),
     )
     // Met datum eerst, op volgorde; anime met alleen een vaste uitzenddag daarna
     .sort((a, b) => (a.next_air!.air_date ?? '9999').localeCompare(b.next_air!.air_date ?? '9999'))

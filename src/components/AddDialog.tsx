@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { fetchExtraDetails, type CatalogResult } from '../lib/catalog'
 import { setEpisodesWatched } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
-import { MEDIA_LABELS, type WatchStatus, type WatchlistItem } from '../lib/types'
+import { MEDIA_LABELS, type Priority, type WatchStatus, type WatchlistItem } from '../lib/types'
+import PriorityPicker from './PriorityPicker'
 import RatingPicker from './RatingPicker'
 import StatusPicker from './StatusPicker'
 
@@ -10,13 +11,16 @@ export default function AddDialog({
   result,
   onClose,
   onAdded,
+  initialStatus = 'completed',
 }: {
   result: CatalogResult
   onClose: () => void
   onAdded: (item: WatchlistItem) => void
+  initialStatus?: WatchStatus
 }) {
-  const [status, setStatus] = useState<WatchStatus>('completed')
+  const [status, setStatus] = useState<WatchStatus>(initialStatus)
   const [rating, setRating] = useState<number | null>(null)
+  const [priority, setPriority] = useState<Priority | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,7 +43,8 @@ export default function AddDialog({
           total_episodes: extra.total_episodes,
           seasons: extra.seasons,
           status,
-          rating,
+          rating: status === 'plan_to_watch' ? null : rating,
+          priority: status === 'plan_to_watch' ? priority : null,
         })
         .select()
         .single()
@@ -92,10 +97,17 @@ export default function AddDialog({
           <p className="text-sm text-muted">Status</p>
           <StatusPicker value={status} onChange={setStatus} />
         </div>
-        <div className="mt-5 space-y-2">
-          <p className="text-sm text-muted">Cijfer (optioneel)</p>
-          <RatingPicker value={rating} onChange={setRating} />
-        </div>
+        {status === 'plan_to_watch' ? (
+          <div className="mt-5 space-y-2">
+            <p className="text-sm text-muted">Prioriteit (optioneel)</p>
+            <PriorityPicker value={priority} onChange={setPriority} />
+          </div>
+        ) : (
+          <div className="mt-5 space-y-2">
+            <p className="text-sm text-muted">Cijfer (optioneel)</p>
+            <RatingPicker value={rating} onChange={setRating} />
+          </div>
+        )}
 
         {error && <p className="mt-4 text-sm text-red-400">Toevoegen mislukt: {error}</p>}
 

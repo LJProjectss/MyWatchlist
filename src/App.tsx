@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import { isSupabaseConfigured } from './lib/supabase'
 import Detail from './pages/Detail'
 import Login from './pages/Login'
+import Recommendations from './pages/Recommendations'
 import Search from './pages/Search'
 import SetupRequired from './pages/SetupRequired'
 import Stats from './pages/Stats'
@@ -30,6 +31,7 @@ function AppRoutes() {
         <Route index element={<Watchlist />} />
         <Route path="zoeken" element={<Search />} />
         <Route path="titel/:id" element={<Detail />} />
+        <Route path="aanbevolen" element={<Recommendations />} />
         <Route path="statistieken" element={<Stats />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

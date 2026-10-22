@@ -2,12 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import EpisodeTracker from '../components/EpisodeTracker'
 import RatingPicker from '../components/RatingPicker'
+import PriorityPicker from '../components/PriorityPicker'
 import StatusPicker from '../components/StatusPicker'
+import TagEditor from '../components/TagEditor'
+import WatchHistory from '../components/WatchHistory'
 import WhereToWatch from '../components/WhereToWatch'
 import { externalLinks } from '../lib/catalog'
 import { hasEpisodes, loadWatched, refreshShowInfo } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
-import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchlistItem } from '../lib/types'
+import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchHistoryEntry, type WatchlistItem } from '../lib/types'
+import { loadHistory, recordCompletion } from '../lib/history'
 
 export default function Detail() {
   const { id } = useParams()
@@ -17,6 +21,8 @@ export default function Detail() {
   const [error, setError] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
   // null zolang de voortgang laadt, zodat het juiste seizoen meteen openklapt
+  const [history, setHistory] = useState<WatchHistoryEntry[]>([])
+  const [allTags, setAllTags] = useState<string[]>([])
   const [watched, setWatched] = useState<Set<string> | null>(null)
 
   async function refreshEpisodes(loaded: WatchlistItem) {
@@ -31,6 +37,18 @@ export default function Detail() {
     const changes = await refreshShowInfo(loaded, seen).catch(() => null)
     if (changes) setItem((current) => (current ? { ...current, ...changes } : current))
   }
+
+  useEffect(() => {
+    if (id) loadHistory(id).then(setHistory).catch(() => {})
+  }, [id])
+
+  // Labels die je al eerder hebt gebruikt, als suggesties
+  useEffect(() => {
+    supabase
+      .from('watchlist_items')
+      .select('tags')
+      .then(({ data }) => setAllTags([...new Set((data ?? []).flatMap((r) => r.tags ?? []))].sort()))
+  }, [])
 
   useEffect(() => {
     supabase
@@ -56,7 +74,22 @@ export default function Detail() {
     if (error) {
       setItem((current) => (current ? { ...current, ...pick(item, changes) } : current))
       setError(`Opslaan mislukt: ${error.message}`)
+      return
     }
+    // Nieuwe kijkbeurt: voortgang van die beurt laden (leeg bij opnieuw beginnen)
+    if (changes.current_watch !== undefined) {
+      const updated = { ...item, ...changes }
+      setWatched((await loadWatched([updated]).catch(() => new Map())).get(item.id) ?? new Set())
+    }
+    // Helemaal gezien: datum vastleggen in de kijkgeschiedenis
+    if (changes.status === 'completed' && item.status !== 'completed') {
+      await recordCompletion(item.id).catch(() => {})
+      reloadHistory()
+    }
+  }
+
+  function reloadHistory() {
+    if (id) loadHistory(id).then(setHistory).catch(() => {})
   }
 
   function rateSeason(seasonNumber: number, value: number | null) {
@@ -124,6 +157,13 @@ export default function Detail() {
             <StatusPicker value={item.status} onChange={(status) => update({ status })} />
           </section>
 
+          {item.status === 'plan_to_watch' && (
+            <section className="space-y-2">
+              <h2 className="text-sm text-muted">Prioriteit</h2>
+              <PriorityPicker value={item.priority} onChange={(priority) => update({ priority })} />
+            </section>
+          )}
+
           <section className="space-y-2">
             <h2 className="text-sm text-muted">Jouw cijfer</h2>
             {seasonRatingCount > 0 ? (
@@ -155,6 +195,22 @@ export default function Detail() {
               placeholder="Wat vond je ervan?"
               className="w-full max-w-xl rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
             />
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-sm text-muted">Kijkgeschiedenis</h2>
+            <WatchHistory
+              item={item}
+              history={history}
+              watchedThisRound={watched?.size ?? 0}
+              onHistoryChange={reloadHistory}
+              onItemChange={update}
+            />
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-sm text-muted">Labels</h2>
+            <TagEditor tags={item.tags ?? []} suggestions={allTags} onChange={(tags) => update({ tags })} />
           </section>
 
           <section className="space-y-2">

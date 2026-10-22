@@ -2,6 +2,8 @@
 
 Een webapp om films, series en anime bij te houden die je hebt gekeken, ze een cijfer van 1 tot 10 te geven en per aflevering te zien waar je bent gebleven. Gegevens komen van TMDB (films en series) en Jikan (MyAnimeList).
 
+Wat de app kan: zoeken en toevoegen, cijfers (ook per seizoen), afleveringen afvinken, *Verder kijken* en *Binnenkort* met uitzenddata, waar je iets kunt streamen in Nederland, labels en een Wil ik zien-lijst met prioriteit, kijkgeschiedenis en herkijken, aanbevelingen, statistieken. Je kunt de app installeren op je telefoon (Safari: Deel → Zet op beginscherm; Chrome: App installeren).
+
 Gebouwd met React, Vite, Tailwind CSS en Supabase (inloggen en database). Bedoeld om te draaien op Netlify.
 
 ## Eenmalig instellen
