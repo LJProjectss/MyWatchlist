@@ -13,7 +13,7 @@ import {
   statusAfterProgress,
 } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
-import { MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
+import { formatRating, MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 
 type TypeFilter = MediaType | 'all'
 type StatusFilter = WatchStatus | 'all'
@@ -188,7 +188,7 @@ export default function Watchlist() {
                   )}
                   <div className="flex items-center justify-between pt-1 text-xs">
                     <span className="text-muted">{STATUS_LABELS[item.status]}</span>
-                    {item.rating && <span className="font-semibold text-amber-400">★ {item.rating}</span>}
+                    {item.rating && <span className="font-semibold text-amber-400">★ {formatRating(item.rating)}</span>}
                   </div>
                 </div>
               </Link>

@@ -19,11 +19,13 @@ export default function EpisodeTracker({
   watched,
   onWatchedChange,
   onItemChange,
+  onRateSeason,
 }: {
   item: WatchlistItem
   watched: Set<string>
   onWatchedChange: (watched: Set<string>) => void
   onItemChange: (changes: Partial<WatchlistItem>) => void
+  onRateSeason?: (seasonNumber: number, rating: number | null) => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const seasons = item.seasons ?? []
@@ -100,6 +102,8 @@ export default function EpisodeTracker({
             // Het seizoen waar je nu zit staat standaard open
             defaultOpen={seasons.length === 1 || next?.season_number === season.season_number}
             onMark={mark}
+            rating={item.season_ratings?.[season.season_number] ?? null}
+            onRate={onRateSeason && ((value) => onRateSeason(season.season_number, value))}
           />
         ))}
       </ul>
@@ -113,12 +117,16 @@ function SeasonRow({
   watched,
   defaultOpen,
   onMark,
+  rating,
+  onRate,
 }: {
   item: WatchlistItem
   season: SeasonInfo
   watched: Set<string>
   defaultOpen: boolean
   onMark: (episodes: EpisodeRef[], value: boolean) => void
+  rating: number | null
+  onRate?: (rating: number | null) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [episodes, setEpisodes] = useState<EpisodeInfo[] | null>(null)
@@ -162,6 +170,23 @@ function SeasonRow({
             </span>
           </span>
         </button>
+        {onRate && (
+          <select
+            value={rating ?? ''}
+            onChange={(e) => onRate(e.target.value ? Number(e.target.value) : null)}
+            aria-label={`Cijfer voor ${season.name}`}
+            className={`shrink-0 rounded-md border bg-surface px-2 py-1.5 text-xs outline-none focus:border-accent ${
+              rating ? 'border-amber-400/60 text-amber-400' : 'border-line text-muted'
+            }`}
+          >
+            <option value="">★ –</option>
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                ★ {n}
+              </option>
+            ))}
+          </select>
+        )}
         <button
           onClick={() => onMark(all, !complete)}
           className={`shrink-0 rounded-md border px-3 py-1.5 text-xs transition ${

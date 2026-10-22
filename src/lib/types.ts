@@ -18,6 +18,8 @@ export interface WatchlistItem {
   seasons: SeasonInfo[] | null
   status: WatchStatus
   rating: number | null
+  // Cijfer per seizoensnummer; het seriecijfer is dan het gemiddelde hiervan
+  season_ratings: Record<string, number> | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -49,4 +51,15 @@ export const MEDIA_LABELS: Record<MediaType, string> = {
   movie: 'Film',
   tv: 'Serie',
   anime: 'Anime',
+}
+
+export function formatRating(rating: number) {
+  return Number.isInteger(rating) ? String(rating) : rating.toFixed(1).replace('.', ',')
+}
+
+// Gemiddelde van de seizoenscijfers met één decimaal, of null als er geen zijn
+export function averageSeasonRating(ratings: Record<string, number> | null) {
+  const values = Object.values(ratings ?? {})
+  if (values.length === 0) return null
+  return Math.round((values.reduce((sum, r) => sum + r, 0) / values.length) * 10) / 10
 }

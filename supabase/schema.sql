@@ -17,7 +17,10 @@ create table if not exists public.watchlist_items (
   seasons         jsonb,
   status          text not null default 'plan_to_watch'
                   check (status in ('watching', 'completed', 'plan_to_watch', 'on_hold', 'dropped')),
-  rating          smallint check (rating between 1 and 10),
+  -- Bij series met seizoenscijfers is dit het gemiddelde, daarom met één decimaal
+  rating          numeric(3, 1) check (rating between 1 and 10),
+  -- Cijfer per seizoen, bijv. {"1": 8, "2": 9}
+  season_ratings  jsonb,
   notes           text,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
@@ -26,6 +29,8 @@ create table if not exists public.watchlist_items (
 
 -- Voor databases die met een eerdere versie van dit bestand zijn gemaakt
 alter table public.watchlist_items add column if not exists seasons jsonb;
+alter table public.watchlist_items add column if not exists season_ratings jsonb;
+alter table public.watchlist_items alter column rating type numeric(3, 1);
 
 create table if not exists public.watched_episodes (
   id              uuid primary key default gen_random_uuid(),

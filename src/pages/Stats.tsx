@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
+import { formatRating, MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 
 export default function Stats() {
   const [items, setItems] = useState<WatchlistItem[] | null>(null)
@@ -30,7 +30,7 @@ export default function Stats() {
     const r = list.filter((i) => i.rating !== null)
     return r.length ? (r.reduce((sum, i) => sum + i.rating!, 0) / r.length).toFixed(1).replace('.', ',') : '–'
   }
-  const distribution = Array.from({ length: 10 }, (_, i) => rated.filter((r) => r.rating === i + 1).length)
+  const distribution = Array.from({ length: 10 }, (_, i) => rated.filter((r) => Math.round(r.rating!) === i + 1).length)
   const maxCount = Math.max(1, ...distribution)
   const top = [...rated].sort((a, b) => b.rating! - a.rating! || a.title.localeCompare(b.title, 'nl')).slice(0, 5)
 
@@ -110,7 +110,7 @@ export default function Stats() {
                   <Link to={`/titel/${item.id}`} className="min-w-0 flex-1 truncate text-sm hover:underline">
                     {item.title}
                   </Link>
-                  <span className="text-sm font-semibold text-amber-400">★ {item.rating}</span>
+                  <span className="text-sm font-semibold text-amber-400">★ {formatRating(item.rating!)}</span>
                 </li>
               ))}
             </ol>

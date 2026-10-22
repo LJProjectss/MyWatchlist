@@ -6,7 +6,7 @@ import StatusPicker from '../components/StatusPicker'
 import { externalLinks, totalEpisodes } from '../lib/catalog'
 import { fetchSeasons, hasEpisodes, loadWatched } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
-import { MEDIA_LABELS, type WatchlistItem } from '../lib/types'
+import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchlistItem } from '../lib/types'
 
 export default function Detail() {
   const { id } = useParams()
@@ -61,6 +61,15 @@ export default function Detail() {
     }
   }
 
+  function rateSeason(seasonNumber: number, value: number | null) {
+    if (!item) return
+    const next = { ...(item.season_ratings ?? {}) }
+    if (value === null) delete next[seasonNumber]
+    else next[seasonNumber] = value
+    const seasonRatings = Object.keys(next).length ? next : null
+    update({ season_ratings: seasonRatings, rating: averageSeasonRating(seasonRatings) })
+  }
+
   async function handleDelete() {
     if (!item || !confirm(`“${item.title}” uit je lijst verwijderen?`)) return
     const { error } = await supabase.from('watchlist_items').delete().eq('id', item.id)
@@ -78,6 +87,10 @@ export default function Detail() {
         </Link>
       </div>
     )
+
+  // Cijfers per seizoen alleen bij series met meerdere seizoenen
+  const canRateSeasons = item.media_type === 'tv' && (item.seasons?.length ?? 0) > 1
+  const seasonRatingCount = Object.keys(item.season_ratings ?? {}).length
 
   return (
     <div className="space-y-6">
@@ -115,9 +128,23 @@ export default function Detail() {
 
           <section className="space-y-2">
             <h2 className="text-sm text-muted">Jouw cijfer</h2>
-            <div className="max-w-xl">
-              <RatingPicker value={item.rating} onChange={(rating) => update({ rating })} />
-            </div>
+            {seasonRatingCount > 0 ? (
+              <p>
+                <span className="text-2xl font-semibold text-amber-400">★ {formatRating(item.rating!)}</span>
+                <span className="ml-2 text-sm text-muted">
+                  gemiddelde van {seasonRatingCount} {seasonRatingCount === 1 ? 'seizoen' : 'seizoenen'}
+                </span>
+              </p>
+            ) : (
+              <div className="max-w-xl space-y-2">
+                <RatingPicker value={item.rating} onChange={(rating) => update({ rating })} />
+                {canRateSeasons && (
+                  <p className="text-xs text-muted">
+                    Of geef hieronder per seizoen een cijfer; dan wordt dit het gemiddelde.
+                  </p>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="space-y-2">
@@ -144,7 +171,13 @@ export default function Detail() {
         <section className="space-y-3 border-t border-line pt-6">
           <h2 className="text-lg font-semibold">Afleveringen</h2>
           {watched ? (
-            <EpisodeTracker item={item} watched={watched} onWatchedChange={setWatched} onItemChange={update} />
+            <EpisodeTracker
+              item={item}
+              watched={watched}
+              onWatchedChange={setWatched}
+              onItemChange={update}
+              onRateSeason={canRateSeasons ? rateSeason : undefined}
+            />
           ) : (
             <p className="text-sm text-muted">Laden…</p>
           )}
