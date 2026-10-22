@@ -7,12 +7,24 @@ import Login from './pages/Login'
 import Recommendations from './pages/Recommendations'
 import Search from './pages/Search'
 import Settings from './pages/Settings'
+import SharedList from './pages/SharedList'
+import Calendar from './pages/Calendar'
 import SetupRequired from './pages/SetupRequired'
 import Stats from './pages/Stats'
 import Watchlist from './pages/Watchlist'
 
 export default function App() {
   if (!isSupabaseConfigured) return <SetupRequired />
+  // Deellinks zijn openbaar en werken zonder in te loggen
+  if (location.pathname.startsWith('/delen/')) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/delen/:token" element={<SharedList />} />
+        </Routes>
+      </BrowserRouter>
+    )
+  }
   return (
     <AuthProvider>
       <BrowserRouter>
@@ -30,6 +42,7 @@ function AppRoutes() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<Watchlist />} />
+        <Route path="kalender" element={<Calendar />} />
         <Route path="zoeken" element={<Search />} />
         <Route path="titel/:id" element={<Detail />} />
         <Route path="aanbevolen" element={<Recommendations />} />

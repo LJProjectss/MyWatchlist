@@ -5,6 +5,7 @@ import { useScrollRestoration } from '../lib/useScrollRestoration'
 
 const NAV = [
   { to: '/', label: 'Mijn lijst', icon: ListIcon },
+  { to: '/kalender', label: 'Kalender', icon: CalendarIcon },
   { to: '/zoeken', label: 'Zoeken', icon: SearchIcon },
   { to: '/aanbevolen', label: 'Aanbevolen', icon: SparkIcon },
   { to: '/statistieken', label: 'Statistieken', icon: ChartIcon },
@@ -78,14 +79,14 @@ export default function Layout() {
       </main>
 
       {/* Onderste navigatiebalk op telefoon */}
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             end
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-2.5 text-xs ${isActive ? 'text-fg' : 'text-muted'}`
+              `flex flex-col items-center gap-1 py-2.5 text-[11px] ${isActive ? 'text-fg' : 'text-muted'}`
             }
           >
             <Icon />
@@ -101,6 +102,15 @@ function ListIcon() {
   return (
     <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" strokeLinecap="round" />
     </svg>
   )
 }

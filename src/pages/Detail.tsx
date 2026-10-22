@@ -7,11 +7,16 @@ import StatusPicker from '../components/StatusPicker'
 import TagEditor from '../components/TagEditor'
 import WatchHistory from '../components/WatchHistory'
 import WhereToWatch from '../components/WhereToWatch'
+import Trailer from '../components/Trailer'
 import { externalLinks } from '../lib/catalog'
 import { hasEpisodes, loadWatched, refreshShowInfo } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
 import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchHistoryEntry, type WatchlistItem } from '../lib/types'
 import { loadHistory, recordCompletion } from '../lib/history'
+import { loadReviews, saveReview } from '../lib/reviews'
+import type { EpisodeRef } from '../lib/episodes'
+import { epKey } from '../lib/episodes'
+import type { EpisodeReview } from '../lib/types'
 import { displayTitle, secondaryTitle } from '../lib/titles'
 import {
   cacheItemChanges,
@@ -58,9 +63,37 @@ export default function Detail() {
     if (changes) setItem((current) => (current ? { ...current, ...changes } : current))
   }
 
+  const [reviews, setReviews] = useState<Map<string, EpisodeReview>>(new Map())
+
   useEffect(() => {
     if (id) loadHistory(id).then(setHistory).catch(() => {})
+    if (id) loadReviews(id).then(setReviews).catch(() => {})
   }, [id])
+
+  async function changeReview(ref: EpisodeRef, rating: number | null, note: string | null) {
+    if (!item) return
+    const key = epKey(ref.season_number, ref.episode_number)
+    const previous = reviews
+    const next = new Map(reviews)
+    if (rating === null && !note) next.delete(key)
+    else next.set(key, { ...ref, rating, note })
+    setReviews(next)
+    setError(null)
+    try {
+      await saveReview(item.id, ref, rating, note)
+    } catch (e) {
+      setReviews(previous)
+      setError(`Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  function noteSeason(seasonNumber: number, note: string | null) {
+    if (!item) return
+    const next = { ...(item.season_notes ?? {}) }
+    if (note) next[seasonNumber] = note
+    else delete next[seasonNumber]
+    update({ season_notes: Object.keys(next).length ? next : null })
+  }
 
   // Labels die je al eerder hebt gebruikt, als suggesties
   useEffect(() => {
@@ -241,6 +274,8 @@ export default function Detail() {
             <TagEditor tags={item.tags ?? []} suggestions={allTags} onChange={(tags) => update({ tags })} />
           </section>
 
+          <Trailer item={item} />
+
           <section className="space-y-2">
             <h2 className="text-sm text-muted">Waar te kijken</h2>
             <WhereToWatch item={item} />
@@ -264,6 +299,9 @@ export default function Detail() {
               onWatchedChange={setWatched}
               onItemChange={update}
               onRateSeason={canRateSeasons ? rateSeason : undefined}
+              reviews={reviews}
+              onReviewChange={changeReview}
+              onSeasonNote={noteSeason}
             />
           ) : (
             <p className="text-sm text-muted">Laden…</p>

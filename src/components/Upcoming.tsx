@@ -21,7 +21,12 @@ export default function Upcoming({ items }: { items: WatchlistItem[] }) {
   if (upcoming.length === 0) return null
   return (
     <section className="space-y-3">
-      <h2 className="text-lg font-semibold">Binnenkort</h2>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-lg font-semibold">Binnenkort</h2>
+        <Link to="/kalender" className="text-sm text-accent-hover hover:underline">
+          Kalender →
+        </Link>
+      </div>
       <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-panel">
         {upcoming.map((item) => (
           <li key={item.id}>

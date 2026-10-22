@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useAuth } from '../auth/AuthProvider'
-import { downloadCsv, downloadJsonBackup } from '../lib/backup'
+import PushSettings from '../components/PushSettings'
+import ShareSettings from '../components/ShareSettings'
+import { downloadCsv, downloadJsonBackup, restoreJsonBackup } from '../lib/backup'
 import { supabase } from '../lib/supabase'
 import { getTheme, setTheme, type ThemeChoice } from '../lib/theme'
 import { getAnimeTitleMode, setAnimeTitleMode, type AnimeTitleMode } from '../lib/titles'
@@ -23,6 +25,20 @@ export default function Settings() {
   const [animeTitles, setAnimeTitlesState] = useState(getAnimeTitleMode)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  async function restore(file: File) {
+    if (!confirm('Back-up terugzetten? Titels uit de back-up worden toegevoegd of bijgewerkt. Titels die er niet in staan blijven gewoon staan.')) return
+    setBusy('restore')
+    setMessage(null)
+    try {
+      const count = await restoreJsonBackup(file)
+      setMessage({ ok: true, text: `Teruggezet: ${count} ${count === 1 ? 'titel' : 'titels'}.` })
+    } catch (e) {
+      setMessage({ ok: false, text: `Terugzetten mislukt: ${e instanceof Error ? e.message : String(e)}` })
+    }
+    setBusy(null)
+  }
 
   async function download(kind: 'json' | 'csv') {
     setBusy(kind)
@@ -85,7 +101,7 @@ export default function Settings() {
 
       <Section
         title="Back-up"
-        description="Download je hele lijst, inclusief cijfers, notities, labels, bekeken afleveringen en kijkgeschiedenis."
+        description="Download je hele lijst, inclusief cijfers, notities, labels, bekeken afleveringen en kijkgeschiedenis. Met een .json-back-up kun je alles later weer terugzetten."
       >
         <div className="flex flex-wrap gap-2">
           <button
@@ -102,8 +118,40 @@ export default function Settings() {
           >
             {busy === 'csv' ? 'Bezig…' : 'Lijst voor Excel (.csv)'}
           </button>
+          <button
+            onClick={() => fileInput.current?.click()}
+            disabled={busy !== null}
+            className="rounded-md border border-line px-4 py-2 text-sm text-muted hover:text-fg disabled:opacity-50"
+          >
+            {busy === 'restore' ? 'Bezig met terugzetten…' : 'Back-up terugzetten'}
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file) restore(file)
+            }}
+          />
         </div>
         {message && <p className={`text-sm ${message.ok ? 'text-good' : 'text-bad'}`}>{message.text}</p>}
+      </Section>
+
+      <Section
+        title="Meldingen"
+        description="Een melding op dit apparaat als er een nieuwe aflevering uit is van een serie of anime die je volgt."
+      >
+        <PushSettings />
+      </Section>
+
+      <Section
+        title="Lijst delen"
+        description="Een link waarmee anderen je lijst of top 10 kunnen bekijken, zonder account. Notities en labels zijn niet te zien."
+      >
+        <ShareSettings />
       </Section>
 
       <Section title="Account" description={session?.user.email ? `Ingelogd als ${session.user.email}` : undefined}>

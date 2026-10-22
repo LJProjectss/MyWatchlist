@@ -50,6 +50,8 @@ alter table public.watchlist_items add column if not exists next_air jsonb;
 alter table public.watchlist_items add column if not exists show_status text;
 alter table public.watchlist_items add column if not exists info_refreshed_at timestamptz;
 alter table public.watchlist_items add column if not exists runtime integer;
+-- Notitie per seizoen, bijv. {"1": "Sterk begin"}
+alter table public.watchlist_items add column if not exists season_notes jsonb;
 
 create table if not exists public.watched_episodes (
   id              uuid primary key default gen_random_uuid(),
@@ -117,6 +119,90 @@ drop policy if exists "eigen kijkgeschiedenis" on public.watch_history;
 create policy "eigen kijkgeschiedenis" on public.watch_history
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Cijfer en notitie per aflevering
+create table if not exists public.episode_reviews (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  item_id         uuid not null references public.watchlist_items (id) on delete cascade,
+  season_number   integer not null default 1,
+  episode_number  integer not null,
+  rating          smallint check (rating between 1 and 10),
+  note            text,
+  updated_at      timestamptz not null default now(),
+  unique (item_id, season_number, episode_number)
+);
+alter table public.episode_reviews enable row level security;
+drop policy if exists "eigen recensies" on public.episode_reviews;
+create policy "eigen recensies" on public.episode_reviews
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Apparaten die pushmeldingen willen ontvangen
+create table if not exists public.push_subscriptions (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  endpoint        text not null unique,
+  p256dh          text not null,
+  auth            text not null,
+  created_at      timestamptz not null default now()
+);
+alter table public.push_subscriptions enable row level security;
+drop policy if exists "eigen meldingen" on public.push_subscriptions;
+create policy "eigen meldingen" on public.push_subscriptions
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Alleen voor de server (niet bereikbaar via de app): sleutels voor pushmeldingen
+-- en welke afleveringen al gemeld zijn
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+create table if not exists private.push_keys (
+  id              integer primary key default 1 check (id = 1),
+  public_key      text not null,
+  private_key     text not null
+);
+create table if not exists private.push_sent (
+  item_id         uuid not null references public.watchlist_items (id) on delete cascade,
+  season_number   integer not null,
+  episode_number  integer not null,
+  sent_at         timestamptz not null default now(),
+  primary key (item_id, season_number, episode_number)
+);
+
+-- Openbare links om je lijst of top 10 te delen
+create table if not exists public.shares (
+  token           text primary key default replace(gen_random_uuid()::text, '-', ''),
+  user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  kind            text not null check (kind in ('list', 'top10')),
+  name            text,
+  created_at      timestamptz not null default now(),
+  unique (user_id, kind)
+);
+alter table public.shares enable row level security;
+drop policy if exists "eigen deellinks" on public.shares;
+create policy "eigen deellinks" on public.shares
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Wat iemand zonder account via een deellink ziet: geen notities of labels
+create or replace function public.shared_list(share_token text)
+returns json language sql stable security definer set search_path = public as $$
+  select json_build_object(
+    'kind', s.kind,
+    'name', s.name,
+    'items', coalesce((
+      select json_agg(row_to_json(t)) from (
+        select i.title, i.original_title, i.media_type, i.poster_url, i.year, i.status, i.rating
+        from public.watchlist_items i
+        where i.user_id = s.user_id and (s.kind = 'list' or i.rating is not null)
+        order by i.rating desc nulls last, i.updated_at desc
+        limit case when s.kind = 'top10' then 10 end
+      ) t
+    ), '[]'::json)
+  )
+  from public.shares s
+  where s.token = share_token
+$$;
+revoke all on function public.shared_list(text) from public;
+grant execute on function public.shared_list(text) to anon, authenticated;
+
 -- Versie van dit schema; de app meldt het als de database achterloopt
 create table if not exists public.app_meta (
   key   text primary key,
@@ -125,7 +211,7 @@ create table if not exists public.app_meta (
 alter table public.app_meta enable row level security;
 drop policy if exists "iedereen mag lezen" on public.app_meta;
 create policy "iedereen mag lezen" on public.app_meta for select using (true);
-insert into public.app_meta (key, value) values ('schema_version', '4')
+insert into public.app_meta (key, value) values ('schema_version', '5')
   on conflict (key) do update set value = excluded.value;
 
 -- Supabase de nieuwe kolommen direct laten zien (anders soms "schema cache"-fouten)

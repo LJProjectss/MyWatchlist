@@ -49,3 +49,29 @@ self.addEventListener('fetch', (event) => {
     ),
   )
 })
+
+// Pushmelding van de server, bijv. bij een nieuwe aflevering
+self.addEventListener('push', (event) => {
+  const data = event.data?.json() ?? {}
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? 'MyWatchlist', {
+      body: data.body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: data.url ?? '/' },
+    }),
+  )
+})
+
+// Tikken op de melding opent de juiste pagina (of de app die al openstaat)
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = event.notification.data?.url ?? '/'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((w) => 'focus' in w)
+      if (open) return open.navigate(url).then((w) => (w ?? open).focus())
+      return self.clients.openWindow(url)
+    }),
+  )
+})

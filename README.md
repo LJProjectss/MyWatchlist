@@ -44,6 +44,10 @@ Stel dit één keer in; daarna wordt de database bij elke deploy vanzelf bijgewe
 
 Zonder deze variabele werkt alles ook, maar dan voer je na een update zelf `supabase/schema.sql` uit in de SQL Editor. De app laat een melding zien als dat nodig is. Lukt het bijwerken tijdens de deploy niet, dan stopt de deploy en blijft de vorige versie online.
 
+## Pushmeldingen
+
+Meldingen bij nieuwe afleveringen worden elk uur verstuurd door een Netlify-functie. Die heeft `SUPABASE_DB_URL` (zie hierboven) en `TMDB_API_TOKEN` nodig, met de scope **Functions** aan naast **Builds**. De sleutels voor meldingen maakt de app zelf aan en bewaart ze in de database. Zet daarna in de app onder **Instellingen → Meldingen** de meldingen aan. Op iPhone werkt dat alleen in de app op je beginscherm (iOS 16.4 of nieuwer).
+
 ## Lokaal ontwikkelen
 
 ```bash

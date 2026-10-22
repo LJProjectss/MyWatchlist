@@ -20,6 +20,8 @@ export interface WatchlistItem {
   rating: number | null
   // Cijfer per seizoensnummer; het seriecijfer is dan het gemiddelde hiervan
   season_ratings: Record<string, number> | null
+  // Notitie per seizoensnummer
+  season_notes: Record<string, string> | null
   notes: string | null
   tags: string[]
   priority: Priority | null
@@ -42,6 +44,14 @@ export interface NextAir {
   episode_number: number
   air_date: string | null
   broadcast?: string | null
+}
+
+// Cijfer en/of notitie bij één aflevering
+export interface EpisodeReview {
+  season_number: number
+  episode_number: number
+  rating: number | null
+  note: string | null
 }
 
 export interface WatchHistoryEntry {

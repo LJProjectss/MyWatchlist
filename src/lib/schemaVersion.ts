@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 
 // Ophogen samen met de versie onderaan supabase/schema.sql
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 export async function databaseIsUpToDate() {
   const { data, error } = await supabase.from('app_meta').select('value').eq('key', 'schema_version').maybeSingle()

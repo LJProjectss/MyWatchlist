@@ -13,7 +13,8 @@ import {
   type EpisodeRef,
 } from '../lib/episodes'
 import { totalEpisodes } from '../lib/catalog'
-import type { SeasonInfo, WatchlistItem } from '../lib/types'
+import { formatRating, type EpisodeReview, type SeasonInfo, type WatchlistItem } from '../lib/types'
+import { averageRating } from '../lib/reviews'
 import ProgressBar from './ProgressBar'
 
 export default function EpisodeTracker({
@@ -22,12 +23,18 @@ export default function EpisodeTracker({
   onWatchedChange,
   onItemChange,
   onRateSeason,
+  reviews,
+  onReviewChange,
+  onSeasonNote,
 }: {
   item: WatchlistItem
   watched: Set<string>
   onWatchedChange: (watched: Set<string>) => void
   onItemChange: (changes: Partial<WatchlistItem>) => void
   onRateSeason?: (seasonNumber: number, rating: number | null) => void
+  reviews: Map<string, EpisodeReview>
+  onReviewChange: (ref: EpisodeRef, rating: number | null, note: string | null) => void
+  onSeasonNote: (seasonNumber: number, note: string | null) => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const seasons = item.seasons ?? []
@@ -109,6 +116,10 @@ export default function EpisodeTracker({
             onMark={mark}
             rating={item.season_ratings?.[season.season_number] ?? null}
             onRate={onRateSeason && ((value) => onRateSeason(season.season_number, value))}
+            reviews={reviews}
+            onReviewChange={onReviewChange}
+            note={item.season_notes?.[season.season_number] ?? null}
+            onNote={(note) => onSeasonNote(season.season_number, note)}
           />
         ))}
       </ul>
@@ -124,6 +135,10 @@ function SeasonRow({
   onMark,
   rating,
   onRate,
+  reviews,
+  onReviewChange,
+  note,
+  onNote,
 }: {
   item: WatchlistItem
   season: SeasonInfo
@@ -132,8 +147,15 @@ function SeasonRow({
   onMark: (episodes: EpisodeRef[], value: boolean) => void
   rating: number | null
   onRate?: (rating: number | null) => void
+  reviews: Map<string, EpisodeReview>
+  onReviewChange: (ref: EpisodeRef, rating: number | null, note: string | null) => void
+  note: string | null
+  onNote: (note: string | null) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [editing, setEditing] = useState<number | null>(null)
+  const seasonReviews = [...reviews.values()].filter((r) => r.season_number === season.season_number)
+  const episodeAverage = averageRating(seasonReviews)
   const [episodes, setEpisodes] = useState<EpisodeInfo[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -171,6 +193,9 @@ function SeasonRow({
               <ProgressBar value={seen} max={season.episode_count} className="max-w-40" />
               <span className="text-xs text-muted whitespace-nowrap">
                 {seen}/{season.episode_count}
+                {episodeAverage !== null && (
+                  <span title="Gemiddeld cijfer van de afleveringen"> · ★ {formatRating(episodeAverage)}</span>
+                )}
               </span>
             </span>
           </span>
@@ -207,36 +232,57 @@ function SeasonRow({
       {open && (
         <div className="border-t border-line">
           {error && <p className="px-4 pt-3 text-xs text-muted">Afleveringsnamen konden niet worden geladen.</p>}
+          <SeasonNote note={note} onSave={onNote} />
           {!episodes && !error && <p className="px-4 py-3 text-sm text-muted">Afleveringen laden…</p>}
           <ul className="divide-y divide-line">
             {list.map((ep) => {
               const ref = { season_number: season.season_number, episode_number: ep.episode_number }
               const isWatched = watched.has(epKey(ref.season_number, ref.episode_number))
               const upcoming = (ep.air_date !== null && ep.air_date > TODAY) || !isAired(item, ref)
+              const review = reviews.get(epKey(ref.season_number, ref.episode_number))
+              const isEditing = editing === ep.episode_number
               return (
                 <li key={ep.episode_number}>
-                  <label
-                    className={`flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-panel-hover ${
-                      upcoming ? 'opacity-50' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isWatched}
-                      onChange={() => onMark([ref], !isWatched)}
-                      className="size-5 shrink-0 accent-accent"
-                    />
-                    <span className="w-8 shrink-0 text-sm text-muted tabular-nums">{ep.episode_number}</span>
-                    <span className={`min-w-0 flex-1 truncate text-sm ${isWatched ? 'text-muted' : ''}`}>
-                      {ep.name ?? `Aflevering ${ep.episode_number}`}
-                    </span>
-                    {ep.air_date && (
-                      <span className="hidden shrink-0 text-xs text-muted sm:block">
-                        {upcoming ? 'Verwacht ' : ''}
-                        {formatDate(ep.air_date)}
+                  <div className="flex items-center hover:bg-panel-hover">
+                    <label
+                      className={`flex min-w-0 flex-1 cursor-pointer items-center gap-3 py-2.5 pl-4 ${upcoming ? 'opacity-50' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isWatched}
+                        onChange={() => onMark([ref], !isWatched)}
+                        className="size-5 shrink-0 accent-accent"
+                      />
+                      <span className="w-8 shrink-0 text-sm text-muted tabular-nums">{ep.episode_number}</span>
+                      <span className={`min-w-0 flex-1 truncate text-sm ${isWatched ? 'text-muted' : ''}`}>
+                        {ep.name ?? `Aflevering ${ep.episode_number}`}
                       </span>
-                    )}
-                  </label>
+                      {ep.air_date && (
+                        <span className="hidden shrink-0 text-xs text-muted sm:block">
+                          {upcoming ? 'Verwacht ' : ''}
+                          {formatDate(ep.air_date)}
+                        </span>
+                      )}
+                    </label>
+                    <button
+                      onClick={() => setEditing(isEditing ? null : ep.episode_number)}
+                      aria-expanded={isEditing}
+                      aria-label={`Cijfer en notitie voor aflevering ${ep.episode_number}`}
+                      className={`shrink-0 px-4 py-2.5 text-xs tabular-nums ${
+                        review ? 'text-star' : 'text-muted/60 hover:text-fg'
+                      }`}
+                    >
+                      {review?.rating ? `★ ${review.rating}` : ''}
+                      {review?.note ? ' ✎' : ''}
+                      {!review && '☆'}
+                    </button>
+                  </div>
+                  {isEditing && (
+                    <EpisodeReviewEditor
+                      review={review ?? null}
+                      onSave={(rating, text) => onReviewChange(ref, rating, text)}
+                    />
+                  )}
                 </li>
               )
             })}
@@ -244,6 +290,83 @@ function SeasonRow({
         </div>
       )}
     </li>
+  )
+}
+
+// Cijfer en notitie bij één aflevering; wordt meteen opgeslagen
+function EpisodeReviewEditor({
+  review,
+  onSave,
+}: {
+  review: EpisodeReview | null
+  onSave: (rating: number | null, note: string | null) => void
+}) {
+  const [note, setNote] = useState(review?.note ?? '')
+  const rating = review?.rating ?? null
+  return (
+    <div className="flex flex-col gap-2 bg-surface/60 px-4 py-3 sm:flex-row sm:items-start">
+      <select
+        value={rating ?? ''}
+        onChange={(e) => onSave(e.target.value ? Number(e.target.value) : null, note.trim() || null)}
+        aria-label="Cijfer voor deze aflevering"
+        className="w-fit rounded-md border border-line bg-panel px-2 py-1.5 text-sm outline-none focus:border-accent"
+      >
+        <option value="">★ Geen cijfer</option>
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+          <option key={n} value={n}>
+            ★ {n}
+          </option>
+        ))}
+      </select>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        onBlur={() => note.trim() !== (review?.note ?? '') && onSave(rating, note.trim() || null)}
+        rows={2}
+        placeholder="Notitie bij deze aflevering"
+        className="min-w-0 flex-1 rounded-md border border-line bg-panel px-3 py-1.5 text-sm outline-none focus:border-accent"
+      />
+    </div>
+  )
+}
+
+function SeasonNote({ note, onSave }: { note: string | null; onSave: (note: string | null) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(note ?? '')
+  if (!editing) {
+    return (
+      <button
+        onClick={() => {
+          setText(note ?? '')
+          setEditing(true)
+        }}
+        className="block w-full px-4 pt-3 text-left text-sm"
+      >
+        {note ? (
+          <span className="block whitespace-pre-line text-muted">
+            {note} <span className="text-xs text-accent-hover">Bewerken</span>
+          </span>
+        ) : (
+          <span className="text-xs text-muted hover:text-fg">+ Notitie bij dit seizoen</span>
+        )}
+      </button>
+    )
+  }
+  return (
+    <div className="px-4 pt-3">
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          setEditing(false)
+          if (text.trim() !== (note ?? '')) onSave(text.trim() || null)
+        }}
+        rows={2}
+        placeholder="Wat vond je van dit seizoen?"
+        className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+      />
+    </div>
   )
 }
 

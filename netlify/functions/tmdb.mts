@@ -5,7 +5,7 @@ const ALLOWED_PATHS = [
   /^search\/(multi|movie|tv)$/,
   /^(movie|tv)\/\d+$/,
   /^tv\/\d+\/season\/\d+$/,
-  /^(movie|tv)\/\d+\/(watch\/providers|recommendations)$/,
+  /^(movie|tv)\/\d+\/(watch\/providers|recommendations|videos)$/,
 ]
 
 export default async (req: Request) => {
