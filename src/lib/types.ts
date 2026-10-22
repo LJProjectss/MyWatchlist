@@ -27,6 +27,7 @@ export interface WatchlistItem {
   next_air: NextAir | null
   show_status: string | null
   info_refreshed_at: string | null
+  runtime: number | null
   created_at: string
   updated_at: string
 }

@@ -16,10 +16,10 @@ export default function RatingPicker({
           aria-pressed={value === n}
           className={`rounded-md border py-2 text-sm font-medium transition ${
             value === n
-              ? 'border-amber-400 bg-amber-400 text-slate-900'
+              ? 'border-star bg-star text-surface'
               : value !== null && n < value
-                ? 'border-amber-400/40 bg-amber-400/10 text-amber-300'
-                : 'border-line bg-surface text-muted hover:border-amber-400/60 hover:text-white'
+                ? 'border-star/40 bg-star/10 text-star'
+                : 'border-line bg-surface text-muted hover:border-star/60 hover:text-fg'
           }`}
         >
           {n}

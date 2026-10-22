@@ -1,20 +1,66 @@
 @import 'tailwindcss';
 
+/* Kleuren via variabelen, zodat licht en donker thema dezelfde klassen gebruiken */
 @theme {
-  --color-surface: #0b0d14;
-  --color-panel: #141824;
-  --color-panel-hover: #1b2030;
-  --color-line: #262c3d;
-  --color-muted: #8b93a7;
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-panel-hover: var(--panel-hover);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
   --color-accent: #6366f1;
-  --color-accent-hover: #818cf8;
+  --color-accent-hover: var(--accent-hover);
+  --color-star: var(--star);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
 }
 
-html {
+:root {
   color-scheme: dark;
+  --surface: #0b0d14;
+  --panel: #141824;
+  --panel-hover: #1b2030;
+  --line: #262c3d;
+  --fg: #f1f5f9;
+  --muted: #8b93a7;
+  --accent-hover: #818cf8;
+  --star: #fbbf24;
+  --good: #34d399;
+  --bad: #f87171;
+}
+
+/* Licht thema: als je dat kiest, of als je systeem licht is en je niets hebt gekozen */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --surface: #f6f7fb;
+    --panel: #ffffff;
+    --panel-hover: #eef0f6;
+    --line: #dde1ea;
+    --fg: #0f172a;
+    --muted: #5b6475;
+    --accent-hover: #4f46e5;
+    --star: #b45309;
+    --good: #047857;
+    --bad: #dc2626;
+  }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --surface: #f6f7fb;
+  --panel: #ffffff;
+  --panel-hover: #eef0f6;
+  --line: #dde1ea;
+  --fg: #0f172a;
+  --muted: #5b6475;
+  --accent-hover: #4f46e5;
+  --star: #b45309;
+  --good: #047857;
+  --bad: #dc2626;
 }
 
 body {
-  @apply bg-surface text-slate-100 antialiased;
+  @apply bg-surface text-fg antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }

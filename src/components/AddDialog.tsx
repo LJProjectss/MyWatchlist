@@ -42,6 +42,7 @@ export default function AddDialog({
           year: result.year,
           total_episodes: extra.total_episodes,
           seasons: extra.seasons,
+          runtime: extra.runtime,
           status,
           rating: status === 'plan_to_watch' ? null : rating,
           priority: status === 'plan_to_watch' ? priority : null,
@@ -109,12 +110,12 @@ export default function AddDialog({
           </div>
         )}
 
-        {error && <p className="mt-4 text-sm text-red-400">Toevoegen mislukt: {error}</p>}
+        {error && <p className="mt-4 text-sm text-bad">Toevoegen mislukt: {error}</p>}
 
         <div className="mt-6 flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 rounded-md border border-line py-2 text-sm text-muted hover:text-white"
+            className="flex-1 rounded-md border border-line py-2 text-sm text-muted hover:text-fg"
           >
             Annuleren
           </button>

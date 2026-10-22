@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { databaseIsUpToDate } from '../lib/schemaVersion'
 
 const NAV = [
   { to: '/', label: 'Mijn lijst', icon: ListIcon },
@@ -9,6 +10,11 @@ const NAV = [
 ]
 
 export default function Layout() {
+  const [outdated, setOutdated] = useState(false)
+  useEffect(() => {
+    databaseIsUpToDate().then((ok) => setOutdated(!ok))
+  }, [])
+
   return (
     <div className="min-h-dvh pb-20 md:pb-0">
       <header className="sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur">
@@ -25,7 +31,7 @@ export default function Layout() {
                 end
                 className={({ isActive }) =>
                   `rounded-md px-3 py-1.5 text-sm transition ${
-                    isActive ? 'bg-panel text-white' : 'text-muted hover:text-white'
+                    isActive ? 'bg-panel text-fg' : 'text-muted hover:text-fg'
                   }`
                 }
               >
@@ -33,14 +39,37 @@ export default function Layout() {
               </NavLink>
             ))}
           </nav>
-          <button
-            onClick={() => supabase.auth.signOut()}
-            className="ml-auto rounded-md px-3 py-1.5 text-sm text-muted hover:text-white"
+          <NavLink
+            to="/instellingen"
+            aria-label="Instellingen"
+            className={({ isActive }) =>
+              `ml-auto flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${
+                isActive ? 'bg-panel text-fg' : 'text-muted hover:text-fg'
+              }`
+            }
           >
-            Uitloggen
-          </button>
+            <GearIcon />
+            <span className="hidden sm:inline">Instellingen</span>
+          </NavLink>
         </div>
       </header>
+
+      {outdated && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10">
+          <p className="mx-auto max-w-6xl px-4 py-2.5 text-sm sm:px-6">
+            Je database moet worden bijgewerkt voor de nieuwste versie van de app. Voer{' '}
+            <a
+              href="https://github.com/LJProjectss/MyWatchlist/blob/main/supabase/schema.sql"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              supabase/schema.sql
+            </a>{' '}
+            uit in Supabase, of zet automatische updates aan (zie de README).
+          </p>
+        </div>
+      )}
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
         <Outlet />
@@ -54,7 +83,7 @@ export default function Layout() {
             to={to}
             end
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-2.5 text-xs ${isActive ? 'text-white' : 'text-muted'}`
+              `flex flex-col items-center gap-1 py-2.5 text-xs ${isActive ? 'text-fg' : 'text-muted'}`
             }
           >
             <Icon />
@@ -95,6 +124,18 @@ function SparkIcon() {
   return (
     <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="3" />
+      <path
+        d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }

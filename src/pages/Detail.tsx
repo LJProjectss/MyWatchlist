@@ -125,7 +125,7 @@ export default function Detail() {
 
   return (
     <div className="space-y-6">
-      <Link to="/" className="text-sm text-muted hover:text-white">
+      <Link to="/" className="text-sm text-muted hover:text-fg">
         ← Mijn lijst
       </Link>
 
@@ -168,7 +168,7 @@ export default function Detail() {
             <h2 className="text-sm text-muted">Jouw cijfer</h2>
             {seasonRatingCount > 0 ? (
               <p>
-                <span className="text-2xl font-semibold text-amber-400">★ {formatRating(item.rating!)}</span>
+                <span className="text-2xl font-semibold text-star">★ {formatRating(item.rating!)}</span>
                 <span className="ml-2 text-sm text-muted">
                   gemiddelde van {seasonRatingCount} {seasonRatingCount === 1 ? 'seizoen' : 'seizoenen'}
                 </span>
@@ -218,9 +218,9 @@ export default function Detail() {
             <WhereToWatch item={item} />
           </section>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-bad">{error}</p>}
 
-          <button onClick={handleDelete} className="text-sm text-red-400 hover:underline">
+          <button onClick={handleDelete} className="text-sm text-bad hover:underline">
             Verwijderen uit mijn lijst
           </button>
         </div>

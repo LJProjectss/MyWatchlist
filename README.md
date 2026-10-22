@@ -33,9 +33,16 @@ Gebouwd met React, Vite, Tailwind CSS en Supabase (inloggen en database). Bedoel
 
 De sleutel blijft geheim: de browser praat met een Netlify Function (`netlify/functions/tmdb.mts`), die TMDB aanroept. Anime komt van [Jikan](https://jikan.moe) (MyAnimeList) en heeft geen sleutel nodig.
 
-## Updates
+## Automatische database-updates
 
-Als `supabase/schema.sql` is veranderd, voer je het hele bestand opnieuw uit in de SQL Editor. Bestaande gegevens blijven gewoon staan.
+Stel dit één keer in; daarna wordt de database bij elke deploy vanzelf bijgewerkt.
+
+1. Klik in Supabase bovenaan op **Connect** en kies bij **Connection String** het type **Session pooler**. Kopieer de URI (begint met `postgresql://postgres.…@…pooler.supabase.com:5432/postgres`).
+2. Vervang `[YOUR-PASSWORD]` door het databasewachtwoord dat je bij het aanmaken van het project koos. Weet je het niet meer? Stel een nieuw in via **Project Settings → Database → Reset database password**.
+3. Zet de URI in Netlify onder **Environment variables** als `SUPABASE_DB_URL`. Vink **Contains secret values** aan en zorg dat de scope **Builds** aanstaat.
+4. Start een nieuwe deploy. In de deploy-log zie je `[database] Bijgewerkt naar versie …`.
+
+Zonder deze variabele werkt alles ook, maar dan voer je na een update zelf `supabase/schema.sql` uit in de SQL Editor. De app laat een melding zien als dat nodig is. Lukt het bijwerken tijdens de deploy niet, dan stopt de deploy en blijft de vorige versie online.
 
 ## Lokaal ontwikkelen
 

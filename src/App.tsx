@@ -6,6 +6,7 @@ import Detail from './pages/Detail'
 import Login from './pages/Login'
 import Recommendations from './pages/Recommendations'
 import Search from './pages/Search'
+import Settings from './pages/Settings'
 import SetupRequired from './pages/SetupRequired'
 import Stats from './pages/Stats'
 import Watchlist from './pages/Watchlist'
@@ -33,6 +34,7 @@ function AppRoutes() {
         <Route path="titel/:id" element={<Detail />} />
         <Route path="aanbevolen" element={<Recommendations />} />
         <Route path="statistieken" element={<Stats />} />
+        <Route path="instellingen" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

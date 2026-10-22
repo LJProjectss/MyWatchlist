@@ -11,6 +11,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Watchlist" />
     <title>MyWatchlist</title>
+    <script>
+      // Gekozen thema meteen toepassen, zodat de pagina niet eerst in het verkeerde thema verschijnt
+      try {
+        var theme = localStorage.getItem('theme')
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

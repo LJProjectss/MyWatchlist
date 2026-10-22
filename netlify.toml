@@ -1,5 +1,6 @@
 [build]
-  command = "npm run build"
+  # Eerst de database bijwerken (als SUPABASE_DB_URL is ingesteld), dan de app bouwen
+  command = "node scripts/migrate.mjs && npm run build"
   publish = "dist"
   functions = "netlify/functions"
 

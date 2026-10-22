@@ -89,7 +89,7 @@ export default function Search() {
               key={key}
               onClick={() => switchCatalog(key)}
               className={`flex-1 rounded-md px-4 py-1.5 text-sm whitespace-nowrap transition ${
-                catalog === key ? 'bg-accent text-white' : 'text-muted hover:text-white'
+                catalog === key ? 'bg-accent text-white' : 'text-muted hover:text-fg'
               }`}
             >
               {label}
@@ -107,7 +107,7 @@ export default function Search() {
       </div>
 
       {loading && <p className="text-muted">Zoeken…</p>}
-      {error && <p className="text-red-400">Zoeken mislukt: {error}</p>}
+      {error && <p className="text-bad">Zoeken mislukt: {error}</p>}
       {!loading && !error && query && results.length === 0 && (
         <p className="text-muted">Niets gevonden voor “{query}”.</p>
       )}
@@ -131,7 +131,7 @@ export default function Search() {
                 {r.overview && <p className="mt-1 line-clamp-2 text-sm text-muted">{r.overview}</p>}
                 <div className="mt-auto pt-2">
                   {ownedId ? (
-                    <Link to={`/titel/${ownedId}`} className="text-sm text-emerald-400 hover:underline">
+                    <Link to={`/titel/${ownedId}`} className="text-sm text-good hover:underline">
                       ✓ In je lijst
                     </Link>
                   ) : (

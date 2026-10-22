@@ -32,6 +32,8 @@ create table if not exists public.watchlist_items (
   next_air        jsonb,
   show_status     text,
   info_refreshed_at timestamptz,
+  -- Speelduur in minuten: van de film, of van één aflevering
+  runtime         integer,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
   unique (user_id, source, media_type, external_id)
@@ -47,6 +49,7 @@ alter table public.watchlist_items add column if not exists current_watch intege
 alter table public.watchlist_items add column if not exists next_air jsonb;
 alter table public.watchlist_items add column if not exists show_status text;
 alter table public.watchlist_items add column if not exists info_refreshed_at timestamptz;
+alter table public.watchlist_items add column if not exists runtime integer;
 
 create table if not exists public.watched_episodes (
   id              uuid primary key default gen_random_uuid(),
@@ -81,7 +84,7 @@ create index if not exists watch_history_item_idx on public.watch_history (item_
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
 declare
-  auto_fields text[] := array['seasons', 'total_episodes', 'next_air', 'show_status', 'info_refreshed_at', 'updated_at'];
+  auto_fields text[] := array['seasons', 'total_episodes', 'next_air', 'show_status', 'info_refreshed_at', 'runtime', 'updated_at'];
 begin
   if (to_jsonb(new) - auto_fields) = (to_jsonb(old) - auto_fields) then
     new.updated_at = old.updated_at;
@@ -113,6 +116,17 @@ create policy "eigen afleveringen" on public.watched_episodes
 drop policy if exists "eigen kijkgeschiedenis" on public.watch_history;
 create policy "eigen kijkgeschiedenis" on public.watch_history
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Versie van dit schema; de app meldt het als de database achterloopt
+create table if not exists public.app_meta (
+  key   text primary key,
+  value text not null
+);
+alter table public.app_meta enable row level security;
+drop policy if exists "iedereen mag lezen" on public.app_meta;
+create policy "iedereen mag lezen" on public.app_meta for select using (true);
+insert into public.app_meta (key, value) values ('schema_version', '4')
+  on conflict (key) do update set value = excluded.value;
 
 -- Supabase de nieuwe kolommen direct laten zien (anders soms "schema cache"-fouten)
 notify pgrst, 'reload schema';

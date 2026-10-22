@@ -18,7 +18,7 @@ export default function StatusPicker({
           className={`rounded-full border px-3 py-1.5 text-sm transition ${
             value === status
               ? 'border-accent bg-accent text-white'
-              : 'border-line bg-surface text-muted hover:border-accent/60 hover:text-white'
+              : 'border-line bg-surface text-muted hover:border-accent/60 hover:text-fg'
           }`}
         >
           {STATUS_LABELS[status]}

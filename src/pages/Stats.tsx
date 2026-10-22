@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import WatchTime from '../components/WatchTime'
 import { supabase } from '../lib/supabase'
 import { formatRating, MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 
@@ -22,7 +23,7 @@ export default function Stats() {
       .then(({ count }) => setEpisodes(count ?? 0))
   }, [])
 
-  if (error) return <p className="text-red-400">Kon je statistieken niet laden: {error}</p>
+  if (error) return <p className="text-bad">Kon je statistieken niet laden: {error}</p>
   if (!items) return <p className="text-muted">Laden…</p>
 
   const rated = items.filter((i) => i.rating !== null)
@@ -44,6 +45,10 @@ export default function Stats() {
         <Tile label="Gemiddeld cijfer" value={average(items)} />
         <Tile label="Afleveringen gekeken" value={episodes ?? '…'} />
       </div>
+
+      <Panel title="Kijktijd">
+        <WatchTime items={items} />
+      </Panel>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Per soort">
@@ -110,7 +115,7 @@ export default function Stats() {
                   <Link to={`/titel/${item.id}`} className="min-w-0 flex-1 truncate text-sm hover:underline">
                     {item.title}
                   </Link>
-                  <span className="text-sm font-semibold text-amber-400">★ {formatRating(item.rating!)}</span>
+                  <span className="text-sm font-semibold text-star">★ {formatRating(item.rating!)}</span>
                 </li>
               ))}
             </ol>

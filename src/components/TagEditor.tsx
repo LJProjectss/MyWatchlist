@@ -27,7 +27,7 @@ export default function TagEditor({
           <button
             onClick={() => onChange(tags.filter((t) => t !== tag))}
             aria-label={`Label ${tag} verwijderen`}
-            className="rounded-full px-1 text-accent-hover/70 hover:text-white"
+            className="rounded-full px-1 text-accent-hover/70 hover:text-fg"
           >
             ×
           </button>

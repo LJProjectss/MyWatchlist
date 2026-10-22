@@ -53,7 +53,7 @@ export default function Recommendations() {
             key={key}
             onClick={() => setFilter(key)}
             className={`rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition sm:px-4 ${
-              filter === key ? 'bg-accent text-white' : 'text-muted hover:text-white'
+              filter === key ? 'bg-accent text-white' : 'text-muted hover:text-fg'
             }`}
           >
             {label}
@@ -61,7 +61,7 @@ export default function Recommendations() {
         ))}
       </div>
 
-      {error && <p className="text-red-400">Aanbevelingen laden mislukt: {error}</p>}
+      {error && <p className="text-bad">Aanbevelingen laden mislukt: {error}</p>}
       {!error && !list && <p className="text-muted">Aanbevelingen zoeken…</p>}
       {list && !hasSeeds && (
         <div className="rounded-xl border border-dashed border-line px-6 py-12 text-center">
@@ -95,7 +95,7 @@ export default function Recommendations() {
                 </p>
                 <div className="mt-auto pt-2">
                   {added.has(key) ? (
-                    <span className="text-sm text-emerald-400">✓ Toegevoegd</span>
+                    <span className="text-sm text-good">✓ Toegevoegd</span>
                   ) : (
                     <button
                       onClick={() => setAdding(result)}

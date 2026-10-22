@@ -41,7 +41,7 @@ export default function ContinueWatching({
                 {aired && (
                   <button
                     onClick={() => onMarkNext(item)}
-                    className="mt-auto self-start rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover"
+                    className="mt-auto self-start rounded-md bg-accent px-3 py-2 text-sm font-medium sm:py-1 sm:text-xs text-white hover:bg-accent-hover"
                   >
                     ✓ {episodeLabel(item, next!)} gekeken
                   </button>

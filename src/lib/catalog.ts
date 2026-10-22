@@ -12,6 +12,7 @@ export interface CatalogResult {
   overview: string | null
   total_episodes: number | null
   subtype: string | null
+  runtime?: number | null
 }
 
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w342'
@@ -67,6 +68,7 @@ export function mapTmdbResults(results: TmdbSearchItem[]): CatalogResult[] {
 
 interface JikanAnime {
   mal_id: number
+  duration?: string | null
   title: string
   title_english: string | null
   type: string | null
@@ -100,6 +102,7 @@ export async function searchJikan(query: string): Promise<CatalogResult[]> {
         overview: a.synopsis,
         total_episodes: a.episodes,
         subtype: a.type,
+        runtime: parseJikanDuration(a.duration),
       }
     })
 }
@@ -108,26 +111,33 @@ export async function searchJikan(query: string): Promise<CatalogResult[]> {
 export async function fetchExtraDetails(result: CatalogResult) {
   if (result.source === 'jikan') {
     let episodes = result.total_episodes
-    // Aanbevelingen van Jikan bevatten geen aantal afleveringen; dan halen we dat los op
-    if (episodes === null) {
+    let runtime = result.runtime ?? null
+    // Aanbevelingen van Jikan bevatten geen aantal afleveringen of speelduur; dan halen we die los op
+    if (episodes === null || runtime === null) {
       const res = await fetch(`${JIKAN}/anime/${result.external_id}`)
-      if (res.ok) episodes = (await res.json()).data?.episodes ?? null
+      if (res.ok) {
+        const data = (await res.json()).data
+        episodes = data?.episodes ?? episodes
+        runtime = parseJikanDuration(data?.duration) ?? runtime
+      }
     }
-    return { imdb_id: null, total_episodes: episodes, seasons: animeSeasons(episodes) }
+    return { imdb_id: null, total_episodes: episodes, seasons: animeSeasons(episodes), runtime }
   }
   if (result.media_type === 'movie') {
-    const movie = await tmdb<{ imdb_id: string | null }>(`movie/${result.external_id}`)
-    return { imdb_id: movie.imdb_id, total_episodes: null, seasons: null }
+    const movie = await tmdb<{ imdb_id: string | null; runtime: number | null }>(`movie/${result.external_id}`)
+    return { imdb_id: movie.imdb_id, total_episodes: null, seasons: null, runtime: movie.runtime || null }
   }
   const tv = await fetchTmdbShow(result.external_id)
-  return { imdb_id: tv.imdb_id, total_episodes: totalEpisodes(tv.seasons), seasons: tv.seasons }
+  return { imdb_id: tv.imdb_id, total_episodes: totalEpisodes(tv.seasons), seasons: tv.seasons, runtime: tv.runtime }
 }
 
 interface TmdbShow {
   external_ids?: { imdb_id: string | null }
   seasons?: { season_number: number; name: string; episode_count: number }[]
   status?: string
-  next_episode_to_air?: { season_number: number; episode_number: number; air_date: string | null } | null
+  next_episode_to_air?: { season_number: number; episode_number: number; air_date: string | null; runtime?: number | null } | null
+  last_episode_to_air?: { runtime?: number | null } | null
+  episode_run_time?: number[]
 }
 
 export async function fetchTmdbShow(id: string) {
@@ -140,7 +150,9 @@ export async function fetchTmdbShow(id: string) {
   const next_air: NextAir | null = next
     ? { season_number: next.season_number, episode_number: next.episode_number, air_date: next.air_date }
     : null
-  return { imdb_id: tv.external_ids?.imdb_id ?? null, seasons, next_air, show_status: tv.status ?? null }
+  // Speelduur per aflevering: TMDB vult episode_run_time niet altijd meer, dan de laatste aflevering
+  const runtime = tv.episode_run_time?.[0] || tv.last_episode_to_air?.runtime || next?.runtime || null
+  return { imdb_id: tv.external_ids?.imdb_id ?? null, seasons, next_air, show_status: tv.status ?? null, runtime }
 }
 
 export function animeSeasons(episodes: number | null): SeasonInfo[] | null {
@@ -162,4 +174,13 @@ export function externalLinks(item: { source: Source; media_type: MediaType; ext
 function parseYear(date: string | null | undefined) {
   const year = date ? Number(date.slice(0, 4)) : NaN
   return Number.isFinite(year) ? year : null
+}
+
+// "24 min per ep", "1 hr 50 min" of "45 sec" naar minuten
+export function parseJikanDuration(duration: string | null | undefined) {
+  if (!duration) return null
+  const hours = Number(duration.match(/(\d+)\s*hr/)?.[1] ?? 0)
+  const minutes = Number(duration.match(/(\d+)\s*min/)?.[1] ?? 0)
+  const total = hours * 60 + minutes
+  return total > 0 ? total : null
 }

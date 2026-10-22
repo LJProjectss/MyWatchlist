@@ -65,8 +65,8 @@ export default function Login() {
             />
           </label>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          {info && <p className="text-sm text-emerald-400">{info}</p>}
+          {error && <p className="text-sm text-bad">{error}</p>}
+          {info && <p className="text-sm text-good">{info}</p>}
 
           <button
             type="submit"

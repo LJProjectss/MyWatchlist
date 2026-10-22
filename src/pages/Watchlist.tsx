@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import ContinueWatching from '../components/ContinueWatching'
 import Upcoming from '../components/Upcoming'
@@ -7,7 +7,9 @@ import { totalEpisodes } from '../lib/catalog'
 import {
   countWatched,
   epKey,
+  episodeLabel,
   hasEpisodes,
+  isAired,
   loadWatched,
   needsRefresh,
   nextEpisode,
@@ -99,7 +101,7 @@ export default function Watchlist() {
   async function markNext(item: WatchlistItem) {
     const seen = watched.get(item.id) ?? new Set<string>()
     const next = nextEpisode(item.seasons, seen)
-    if (!next) return
+    if (!next || !isAired(item, next)) return
     const updated = new Set(seen).add(epKey(next.season_number, next.episode_number))
     setWatched((prev) => new Map(prev).set(item.id, updated))
     try {
@@ -110,10 +112,30 @@ export default function Watchlist() {
         if (status === 'completed') await recordCompletion(item.id).catch(() => {})
         setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)))
       }
+      showToast({
+        text: `${item.title}: ${episodeLabel(item, next)} afgevinkt`,
+        undo: async () => {
+          await setEpisodesWatched(item, [next], false)
+          setWatched((prev) => new Map(prev).set(item.id, seen))
+          if (status !== item.status) {
+            await supabase.from('watchlist_items').update({ status: item.status }).eq('id', item.id)
+            setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status: item.status } : i)))
+          }
+        },
+      })
     } catch (e) {
       setWatched((prev) => new Map(prev).set(item.id, seen))
-      setError(`Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`)
+      showToast({ text: `Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}` })
     }
+  }
+
+  // Korte melding onderin, met de mogelijkheid om een afgevinkte aflevering terug te draaien
+  const [toast, setToast] = useState<{ text: string; undo?: () => Promise<void> } | null>(null)
+  const toastTimer = useRef<number | undefined>(undefined)
+  function showToast(next: { text: string; undo?: () => Promise<void> }) {
+    setToast(next)
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(null), 5000)
   }
 
   const visible = useMemo(() => {
@@ -182,7 +204,7 @@ export default function Watchlist() {
       )}
 
       {loading && <p className="text-muted">Laden…</p>}
-      {error && <p className="text-red-400">Kon je lijst niet laden: {error}</p>}
+      {error && <p className="text-bad">Kon je lijst niet laden: {error}</p>}
 
       {!loading && !error && items.length === 0 && (
         <div className="rounded-xl border border-dashed border-line px-6 py-16 text-center">
@@ -205,10 +227,11 @@ export default function Watchlist() {
                 to={`/titel/${item.id}`}
                 className="block h-full overflow-hidden rounded-lg border border-line bg-panel transition hover:border-accent/60"
               >
-                <div className="aspect-[2/3] bg-panel-hover">
+                <div className="relative aspect-[2/3] bg-panel-hover">
                   {item.poster_url && (
                     <img src={item.poster_url} alt="" loading="lazy" className="size-full object-cover" />
                   )}
+                  <QuickTick item={item} watched={watched.get(item.id)} onTick={() => markNext(item)} />
                 </div>
                 <div className="space-y-1 p-3">
                   <p className="line-clamp-2 text-sm font-medium leading-snug">{item.title}</p>
@@ -233,7 +256,7 @@ export default function Watchlist() {
                       )}
                       {STATUS_LABELS[item.status]}
                     </span>
-                    {item.rating && <span className="font-semibold text-amber-400">★ {formatRating(item.rating)}</span>}
+                    {item.rating && <span className="font-semibold text-star">★ {formatRating(item.rating)}</span>}
                   </div>
                 </div>
               </Link>
@@ -250,7 +273,57 @@ export default function Watchlist() {
           </button>
         </div>
       )}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed inset-x-4 bottom-24 z-30 mx-auto flex max-w-md items-center gap-3 rounded-lg border border-line bg-panel px-4 py-3 text-sm shadow-lg md:bottom-6"
+        >
+          <span className="min-w-0 flex-1">{toast.text}</span>
+          {toast.undo && (
+            <button
+              onClick={() => {
+                const undo = toast.undo!
+                setToast(null)
+                undo().catch(() => showToast({ text: 'Ongedaan maken mislukt.' }))
+              }}
+              className="shrink-0 font-medium text-accent-hover hover:underline"
+            >
+              Ongedaan maken
+            </button>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+// Ronde knop op de poster: met één tik de volgende aflevering afvinken, zonder de titel te openen
+function QuickTick({
+  item,
+  watched,
+  onTick,
+}: {
+  item: WatchlistItem
+  watched: Set<string> | undefined
+  onTick: () => void
+}) {
+  if (item.status !== 'watching' || !hasEpisodes(item) || !watched) return null
+  const next = nextEpisode(item.seasons, watched)
+  if (!next || !isAired(item, next)) return null
+  return (
+    <button
+      onClick={(e) => {
+        // De kaart is een link; de tik is alleen voor de knop
+        e.preventDefault()
+        e.stopPropagation()
+        onTick()
+      }}
+      aria-label={`${episodeLabel(item, next)} van ${item.title} als gekeken markeren`}
+      className="absolute right-2 bottom-2 flex items-center gap-1 rounded-full bg-accent px-3 py-2 text-xs font-semibold text-white shadow-lg ring-2 ring-surface/60 active:scale-95"
+    >
+      ✓ {episodeLabel(item, next)}
+    </button>
   )
 }
 

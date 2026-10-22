@@ -81,13 +81,13 @@ export default function EpisodeTracker({
               ✓ {episodeLabel(item, next)} gekeken
             </button>
           ) : (
-            <p className="text-sm text-emerald-400">Je bent helemaal bij!</p>
+            <p className="text-sm text-good">Je bent helemaal bij!</p>
           )}
           {upcoming && <p className="w-full text-sm text-muted">Volgende uitzending: {upcoming}</p>}
           {nextAired && count === 0 && total > 1 && (
             <button
               onClick={() => mark(allEpisodes(seasons).filter((e) => isAired(item, e)), true)}
-              className="rounded-md border border-line px-4 py-2 text-sm text-muted hover:text-white"
+              className="rounded-md border border-line px-4 py-2 text-sm text-muted hover:text-fg"
             >
               Alles al gezien
             </button>
@@ -95,7 +95,7 @@ export default function EpisodeTracker({
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm text-bad">{error}</p>}
 
       <ul className="space-y-2">
         {seasons.map((season) => (
@@ -181,7 +181,7 @@ function SeasonRow({
             onChange={(e) => onRate(e.target.value ? Number(e.target.value) : null)}
             aria-label={`Cijfer voor ${season.name}`}
             className={`shrink-0 rounded-md border bg-surface px-2 py-1.5 text-xs outline-none focus:border-accent ${
-              rating ? 'border-amber-400/60 text-amber-400' : 'border-line text-muted'
+              rating ? 'border-star/60 text-star' : 'border-line text-muted'
             }`}
           >
             <option value="">★ –</option>
@@ -196,8 +196,8 @@ function SeasonRow({
           onClick={() => onMark(all, !complete)}
           className={`shrink-0 rounded-md border px-3 py-1.5 text-xs transition ${
             complete
-              ? 'border-emerald-500/50 text-emerald-400 hover:border-red-400/60 hover:text-red-400'
-              : 'border-line text-muted hover:text-white'
+              ? 'border-good/50 text-good hover:border-bad/60 hover:text-bad'
+              : 'border-line text-muted hover:text-fg'
           }`}
         >
           {complete ? '✓ Seizoen gezien' : 'Heel seizoen'}

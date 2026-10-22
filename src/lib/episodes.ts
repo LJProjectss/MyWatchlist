@@ -1,4 +1,4 @@
-import { animeSeasons, fetchTmdbShow, JIKAN, tmdb, totalEpisodes } from './catalog'
+import { animeSeasons, fetchTmdbShow, JIKAN, parseJikanDuration, tmdb, totalEpisodes } from './catalog'
 import { supabase } from './supabase'
 import type { NextAir, SeasonInfo, WatchStatus, WatchlistItem } from './types'
 
@@ -24,6 +24,7 @@ export function episodeLabel(item: Pick<WatchlistItem, 'media_type'>, ep: Episod
 }
 
 export interface ShowInfo {
+  runtime: number | null
   seasons: SeasonInfo[] | null
   next_air: NextAir | null
   show_status: string | null
@@ -32,15 +33,16 @@ export interface ShowInfo {
 // Actuele seizoensindeling en volgende uitzending ophalen; nieuwe afleveringen komen zo vanzelf in je lijst.
 export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
   if (item.source === 'tmdb') {
-    const { seasons, next_air, show_status } = await fetchTmdbShow(item.external_id)
-    return { seasons, next_air, show_status }
+    const { seasons, next_air, show_status, runtime } = await fetchTmdbShow(item.external_id)
+    return { seasons, next_air, show_status, runtime }
   }
 
   const res = await fetch(`${JIKAN}/anime/${item.external_id}`)
   if (!res.ok) throw new Error(`Jikan gaf foutcode ${res.status}`)
   const { data } = await res.json()
   const airing = data.status === 'Currently Airing'
-  if (!airing) return { seasons: animeSeasons(data.episodes), next_air: null, show_status: data.status ?? null }
+  const runtime = parseJikanDuration(data.duration)
+  if (!airing) return { seasons: animeSeasons(data.episodes), next_air: null, show_status: data.status ?? null, runtime }
 
   // Bij lopende anime tellen we hoeveel afleveringen er al zijn; de volgende is dan de eerstvolgende uitzending
   await pause()
@@ -60,6 +62,7 @@ export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
       broadcast: data.broadcast?.string ?? null,
     },
     show_status: data.status,
+    runtime,
   }
 }
 
@@ -74,6 +77,7 @@ export async function refreshShowInfo(item: WatchlistItem, watched: Set<string>)
   }
   if (JSON.stringify(info.next_air) !== JSON.stringify(item.next_air)) changes.next_air = info.next_air
   if (info.show_status !== item.show_status) changes.show_status = info.show_status
+  if (info.runtime && info.runtime !== item.runtime) changes.runtime = info.runtime
 
   const updated = { ...item, ...changes }
   if (item.status === 'completed' && nextEpisode(updated.seasons, watched) && isAired(updated, nextEpisode(updated.seasons, watched)!)) {
