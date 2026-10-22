@@ -1,1 +1,36 @@
 # MyWatchlist
+
+Een webapp om films, series en anime bij te houden die je hebt gekeken, ze een cijfer van 1 tot 10 te geven en per aflevering te zien waar je bent gebleven. Gegevens komen van TMDB (films en series) en Jikan (MyAnimeList).
+
+Gebouwd met React, Vite, Tailwind CSS en Supabase (inloggen en database). Bedoeld om te draaien op Netlify.
+
+## Eenmalig instellen
+
+### 1. Supabase (database en inloggen)
+
+1. Maak een gratis account op [supabase.com](https://supabase.com) en klik op **New project**.
+2. Open in je project **SQL Editor → New query**, plak de inhoud van [`supabase/schema.sql`](supabase/schema.sql) en klik op **Run**.
+3. Ga naar **Authentication → URL Configuration** en vul bij **Site URL** het adres van je Netlify-site in (bijvoorbeeld `https://mijn-watchlist.netlify.app`). Daar sturen bevestigingsmails naartoe.
+4. Kopieer onder **Project Settings → API** de **Project URL** en de **anon public** key. Die heb je nodig bij Netlify.
+
+### 2. Netlify (online zetten)
+
+1. Kies op [netlify.com](https://netlify.com) **Add new site → Import an existing project** en selecteer deze GitHub-repository. De build-instellingen staan al in `netlify.toml`.
+2. Voeg onder **Site configuration → Environment variables** toe:
+   - `VITE_SUPABASE_URL`: de Project URL van Supabase
+   - `VITE_SUPABASE_ANON_KEY`: de anon public key van Supabase
+3. Start een nieuwe deploy. Open de site, kies **Registreren** en bevestig je e-mailadres.
+
+> Wil je dat alleen jij een account kunt maken? Zet in Supabase onder **Authentication → Sign In / Providers** de optie **Allow new users to sign up** uit nadat je je eigen account hebt aangemaakt.
+
+### 3. TMDB (voor zoeken, volgende stap)
+
+Vraag op [themoviedb.org](https://www.themoviedb.org/settings/api) een gratis API-sleutel aan en zet het **API Read Access Token** in Netlify als `TMDB_API_TOKEN`. Jikan heeft geen sleutel nodig.
+
+## Lokaal ontwikkelen
+
+```bash
+cp .env.example .env   # en vul je eigen waarden in
+npm install
+npm run dev
+```
