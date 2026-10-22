@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { totalEpisodes } from '../lib/catalog'
-import { countWatched, episodeLabel, nextEpisode } from '../lib/episodes'
+import { countWatched, describeNextAir, episodeLabel, isAired, nextEpisode } from '../lib/episodes'
 import type { WatchlistItem } from '../lib/types'
 import ProgressBar from './ProgressBar'
 
@@ -21,6 +21,7 @@ export default function ContinueWatching({
         {items.map((item) => {
           const seen = watched.get(item.id) ?? new Set<string>()
           const next = nextEpisode(item.seasons, seen)
+          const aired = next !== null && isAired(item, next)
           const count = countWatched(item.seasons, seen)
           const total = totalEpisodes(item.seasons) ?? 0
           return (
@@ -33,15 +34,16 @@ export default function ContinueWatching({
                   {item.title}
                 </Link>
                 <p className="text-xs text-muted">
-                  {next ? `Volgende: ${episodeLabel(item, next)}` : 'Helemaal bij'} · {count}/{total}
+                  {aired ? `Volgende: ${episodeLabel(item, next!)}` : 'Helemaal bij'} · {count}/{total}
                 </p>
                 <ProgressBar value={count} max={total} />
-                {next && (
+                {!aired && item.next_air && <p className="text-xs text-muted">Nieuw: {describeNextAir(item)}</p>}
+                {aired && (
                   <button
                     onClick={() => onMarkNext(item)}
                     className="mt-auto self-start rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover"
                   >
-                    ✓ {episodeLabel(item, next)} gekeken
+                    ✓ {episodeLabel(item, next!)} gekeken
                   </button>
                 )}
               </div>

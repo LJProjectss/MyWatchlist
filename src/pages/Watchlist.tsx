@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import ContinueWatching from '../components/ContinueWatching'
+import Upcoming from '../components/Upcoming'
 import ProgressBar from '../components/ProgressBar'
 import { totalEpisodes } from '../lib/catalog'
 import {
@@ -8,7 +9,9 @@ import {
   epKey,
   hasEpisodes,
   loadWatched,
+  needsRefresh,
   nextEpisode,
+  refreshShowInfo,
   setEpisodesWatched,
   statusAfterProgress,
 } from '../lib/episodes'
@@ -59,12 +62,23 @@ export default function Watchlist() {
           setItems(loaded)
           // Zonder afleveringsvoortgang werkt de lijst nog steeds, dus een fout hier negeren we
           loadWatched(loaded.filter(hasEpisodes))
-            .then(setWatched)
+            .then((map) => {
+              setWatched(map)
+              refreshInBackground(loaded, map)
+            })
             .catch(() => {})
         }
         setLoading(false)
       })
   }, [])
+
+  // Nieuwe afleveringen en uitzenddata ophalen voor series die je volgt (één voor één, i.v.m. limieten van Jikan)
+  async function refreshInBackground(loaded: WatchlistItem[], map: Map<string, Set<string>>) {
+    for (const item of loaded.filter(needsRefresh).slice(0, 15)) {
+      const changes = await refreshShowInfo(item, map.get(item.id) ?? new Set()).catch(() => null)
+      if (changes) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...changes } : i)))
+    }
+  }
 
   const inProgress = useMemo(
     () => items.filter((i) => i.status === 'watching' && hasEpisodes(i) && i.seasons?.length),
@@ -115,6 +129,7 @@ export default function Watchlist() {
       </div>
 
       <ContinueWatching items={inProgress} watched={watched} onMarkNext={markNext} />
+      <Upcoming items={items} />
 
       {items.length > 0 && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex">

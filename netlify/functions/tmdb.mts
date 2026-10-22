@@ -1,7 +1,12 @@
 import type { Config } from '@netlify/functions'
 
 // Alleen deze TMDB-endpoints mogen via deze proxy worden aangeroepen.
-const ALLOWED_PATHS = [/^search\/(multi|movie|tv)$/, /^(movie|tv)\/\d+$/, /^tv\/\d+\/season\/\d+$/]
+const ALLOWED_PATHS = [
+  /^search\/(multi|movie|tv)$/,
+  /^(movie|tv)\/\d+$/,
+  /^tv\/\d+\/season\/\d+$/,
+  /^(movie|tv)\/\d+\/(watch\/providers|recommendations)$/,
+]
 
 export default async (req: Request) => {
   const token = process.env.TMDB_API_TOKEN

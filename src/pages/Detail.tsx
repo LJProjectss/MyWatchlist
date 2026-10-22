@@ -3,8 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import EpisodeTracker from '../components/EpisodeTracker'
 import RatingPicker from '../components/RatingPicker'
 import StatusPicker from '../components/StatusPicker'
-import { externalLinks, totalEpisodes } from '../lib/catalog'
-import { fetchSeasons, hasEpisodes, loadWatched } from '../lib/episodes'
+import WhereToWatch from '../components/WhereToWatch'
+import { externalLinks } from '../lib/catalog'
+import { hasEpisodes, loadWatched, refreshShowInfo } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
 import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchlistItem } from '../lib/types'
 
@@ -19,19 +20,16 @@ export default function Detail() {
   const [watched, setWatched] = useState<Set<string> | null>(null)
 
   async function refreshEpisodes(loaded: WatchlistItem) {
+    let seen = new Set<string>()
     try {
-      setWatched((await loadWatched([loaded])).get(loaded.id) ?? new Set())
+      seen = (await loadWatched([loaded])).get(loaded.id) ?? new Set()
     } catch (e) {
-      setWatched(new Set())
       setError(`Afleveringen laden mislukt: ${e instanceof Error ? e.message : String(e)}`)
     }
-    // Nieuwe seizoenen of afleveringen bijwerken; als de bron niet bereikbaar is, gebruiken we de opgeslagen indeling
-    const seasons = await fetchSeasons(loaded).catch(() => null)
-    if (seasons && JSON.stringify(seasons) !== JSON.stringify(loaded.seasons)) {
-      const changes = { seasons, total_episodes: totalEpisodes(seasons) }
-      setItem((current) => (current ? { ...current, ...changes } : current))
-      await supabase.from('watchlist_items').update(changes).eq('id', loaded.id)
-    }
+    setWatched(seen)
+    // Nieuwe seizoenen, afleveringen en uitzenddata bijwerken; lukt dat niet, dan gebruiken we de opgeslagen gegevens
+    const changes = await refreshShowInfo(loaded, seen).catch(() => null)
+    if (changes) setItem((current) => (current ? { ...current, ...changes } : current))
   }
 
   useEffect(() => {
@@ -157,6 +155,11 @@ export default function Detail() {
               placeholder="Wat vond je ervan?"
               className="w-full max-w-xl rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
             />
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-sm text-muted">Waar te kijken</h2>
+            <WhereToWatch item={item} />
           </section>
 
           {error && <p className="text-sm text-red-400">{error}</p>}

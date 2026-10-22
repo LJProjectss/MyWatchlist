@@ -1,6 +1,6 @@
 import { animeSeasons, fetchTmdbShow, JIKAN, tmdb, totalEpisodes } from './catalog'
 import { supabase } from './supabase'
-import type { SeasonInfo, WatchStatus, WatchlistItem } from './types'
+import type { NextAir, SeasonInfo, WatchStatus, WatchlistItem } from './types'
 
 export interface EpisodeInfo {
   episode_number: number
@@ -23,22 +23,84 @@ export function episodeLabel(item: Pick<WatchlistItem, 'media_type'>, ep: Episod
   return item.media_type === 'anime' ? `Afl. ${ep.episode_number}` : `S${ep.season_number} · A${ep.episode_number}`
 }
 
-// Actuele seizoensindeling ophalen; nieuwe afleveringen komen zo vanzelf in je lijst.
-export async function fetchSeasons(item: WatchlistItem): Promise<SeasonInfo[] | null> {
-  if (item.source === 'tmdb') return (await fetchTmdbShow(item.external_id)).seasons
+export interface ShowInfo {
+  seasons: SeasonInfo[] | null
+  next_air: NextAir | null
+  show_status: string | null
+}
+
+// Actuele seizoensindeling en volgende uitzending ophalen; nieuwe afleveringen komen zo vanzelf in je lijst.
+export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
+  if (item.source === 'tmdb') {
+    const { seasons, next_air, show_status } = await fetchTmdbShow(item.external_id)
+    return { seasons, next_air, show_status }
+  }
 
   const res = await fetch(`${JIKAN}/anime/${item.external_id}`)
   if (!res.ok) throw new Error(`Jikan gaf foutcode ${res.status}`)
   const { data } = await res.json()
-  if (data.episodes) return animeSeasons(data.episodes)
+  const airing = data.status === 'Currently Airing'
+  if (!airing) return { seasons: animeSeasons(data.episodes), next_air: null, show_status: data.status ?? null }
 
-  // Lopende anime hebben nog geen totaal; tel dan de afleveringen die er al zijn
+  // Bij lopende anime tellen we hoeveel afleveringen er al zijn; de volgende is dan de eerstvolgende uitzending
+  await pause()
   const first = await jikanEpisodePage(item.external_id, 1)
   const lastPage = first.pagination.last_visible_page
-  if (lastPage <= 1) return animeSeasons(first.data.length)
-  await pause()
-  const last = await jikanEpisodePage(item.external_id, lastPage)
-  return animeSeasons((lastPage - 1) * 100 + last.data.length)
+  let aired = first.data.length
+  if (lastPage > 1) {
+    await pause()
+    aired = (lastPage - 1) * 100 + (await jikanEpisodePage(item.external_id, lastPage)).data.length
+  }
+  return {
+    seasons: animeSeasons(Math.max(data.episodes ?? 0, aired)),
+    next_air: {
+      season_number: 1,
+      episode_number: aired + 1,
+      air_date: null,
+      broadcast: data.broadcast?.string ?? null,
+    },
+    show_status: data.status,
+  }
+}
+
+// Gegevens verversen en opslaan als ze veranderd zijn. Staat een lopende serie op "gekeken"
+// en zijn er nieuwe afleveringen, dan zetten we hem terug naar "aan het kijken".
+export async function refreshShowInfo(item: WatchlistItem, watched: Set<string>): Promise<Partial<WatchlistItem>> {
+  const info = await fetchShowInfo(item)
+  const changes: Partial<WatchlistItem> = { info_refreshed_at: new Date().toISOString() }
+  if (info.seasons && JSON.stringify(info.seasons) !== JSON.stringify(item.seasons)) {
+    changes.seasons = info.seasons
+    changes.total_episodes = totalEpisodes(info.seasons)
+  }
+  if (JSON.stringify(info.next_air) !== JSON.stringify(item.next_air)) changes.next_air = info.next_air
+  if (info.show_status !== item.show_status) changes.show_status = info.show_status
+
+  const updated = { ...item, ...changes }
+  if (item.status === 'completed' && nextEpisode(updated.seasons, watched) && isAired(updated, nextEpisode(updated.seasons, watched)!)) {
+    changes.status = 'watching'
+  }
+  await supabase.from('watchlist_items').update(changes).eq('id', item.id)
+  return changes
+}
+
+const REFRESH_AFTER_MS = 12 * 60 * 60 * 1000
+
+export function needsRefresh(item: WatchlistItem) {
+  if (!hasEpisodes(item) || item.status === 'dropped' || item.status === 'plan_to_watch') return false
+  if (!item.info_refreshed_at) return true
+  return Date.now() - new Date(item.info_refreshed_at).getTime() > REFRESH_AFTER_MS
+}
+
+// Is deze aflevering al uitgezonden? Alles vanaf de volgende geplande uitzending nog niet.
+export function isAired(item: Pick<WatchlistItem, 'next_air'>, ep: EpisodeRef) {
+  const next = item.next_air
+  if (!next) return true
+  if (ep.season_number !== next.season_number) return ep.season_number < next.season_number
+  return ep.episode_number < next.episode_number
+}
+
+export function formatAirDate(date: string) {
+  return new Date(date).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
 export async function fetchEpisodes(item: WatchlistItem, season: SeasonInfo): Promise<EpisodeInfo[]> {
@@ -154,4 +216,22 @@ export function statusAfterProgress(item: WatchlistItem, watchedCount: number): 
   if (total && watchedCount >= total) return 'completed'
   if (watchedCount > 0 && (item.status === 'plan_to_watch' || item.status === 'completed')) return 'watching'
   return item.status
+}
+
+const DAYS: Record<string, string> = {
+  Mondays: 'maandag', Tuesdays: 'dinsdag', Wednesdays: 'woensdag', Thursdays: 'donderdag',
+  Fridays: 'vrijdag', Saturdays: 'zaterdag', Sundays: 'zondag',
+}
+
+// "S3 · A4 op za 25 okt" of voor anime "Afl. 12, elke vrijdag om 23:00 (JST)"
+export function describeNextAir(item: Pick<WatchlistItem, 'media_type' | 'next_air'>) {
+  const next = item.next_air
+  if (!next) return null
+  const label = episodeLabel(item, next)
+  if (next.air_date) return `${label} op ${formatAirDate(next.air_date)}`
+  if (next.broadcast) {
+    const broadcast = next.broadcast.replace(/^(\w+days)/, (d) => `elke ${DAYS[d] ?? d}`).replace(' at ', ' om ')
+    return `${label}, ${broadcast}`
+  }
+  return `${label}, datum nog onbekend`
 }

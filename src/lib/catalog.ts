@@ -1,4 +1,4 @@
-import type { MediaType, SeasonInfo, Source } from './types'
+import type { MediaType, NextAir, SeasonInfo, Source } from './types'
 
 // Zoekresultaat uit TMDB of Jikan, in één vorm zodat de UI het verschil niet hoeft te kennen.
 export interface CatalogResult {
@@ -116,6 +116,8 @@ export async function fetchExtraDetails(result: CatalogResult) {
 interface TmdbShow {
   external_ids?: { imdb_id: string | null }
   seasons?: { season_number: number; name: string; episode_count: number }[]
+  status?: string
+  next_episode_to_air?: { season_number: number; episode_number: number; air_date: string | null } | null
 }
 
 export async function fetchTmdbShow(id: string) {
@@ -124,7 +126,11 @@ export async function fetchTmdbShow(id: string) {
   const seasons: SeasonInfo[] = (tv.seasons ?? [])
     .filter((s) => s.season_number > 0 && s.episode_count > 0)
     .map((s) => ({ season_number: s.season_number, name: s.name, episode_count: s.episode_count }))
-  return { imdb_id: tv.external_ids?.imdb_id ?? null, seasons }
+  const next = tv.next_episode_to_air
+  const next_air: NextAir | null = next
+    ? { season_number: next.season_number, episode_number: next.episode_number, air_date: next.air_date }
+    : null
+  return { imdb_id: tv.external_ids?.imdb_id ?? null, seasons, next_air, show_status: tv.status ?? null }
 }
 
 export function animeSeasons(episodes: number | null): SeasonInfo[] | null {

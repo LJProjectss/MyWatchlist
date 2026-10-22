@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
   countWatched,
+  describeNextAir,
   epKey,
   episodeLabel,
   fetchEpisodes,
+  isAired,
   nextEpisode,
   setEpisodesWatched,
   statusAfterProgress,
@@ -32,6 +34,8 @@ export default function EpisodeTracker({
   const total = totalEpisodes(item.seasons) ?? 0
   const count = countWatched(item.seasons, watched)
   const next = nextEpisode(item.seasons, watched)
+  const nextAired = next !== null && isAired(item, next)
+  const upcoming = describeNextAir(item)
 
   // Eerst lokaal bijwerken zodat afvinken direct voelt; bij een fout terugdraaien
   async function mark(episodes: EpisodeRef[], value: boolean) {
@@ -69,7 +73,7 @@ export default function EpisodeTracker({
         </div>
         <ProgressBar value={count} max={total} />
         <div className="flex flex-wrap gap-2 pt-1">
-          {next ? (
+          {nextAired ? (
             <button
               onClick={() => mark([next], true)}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
@@ -79,9 +83,10 @@ export default function EpisodeTracker({
           ) : (
             <p className="text-sm text-emerald-400">Je bent helemaal bij!</p>
           )}
-          {next && count === 0 && total > 1 && (
+          {upcoming && <p className="w-full text-sm text-muted">Volgende uitzending: {upcoming}</p>}
+          {nextAired && count === 0 && total > 1 && (
             <button
-              onClick={() => mark(allEpisodes(seasons), true)}
+              onClick={() => mark(allEpisodes(seasons).filter((e) => isAired(item, e)), true)}
               className="rounded-md border border-line px-4 py-2 text-sm text-muted hover:text-white"
             >
               Alles al gezien
@@ -207,7 +212,7 @@ function SeasonRow({
             {list.map((ep) => {
               const ref = { season_number: season.season_number, episode_number: ep.episode_number }
               const isWatched = watched.has(epKey(ref.season_number, ref.episode_number))
-              const upcoming = ep.air_date !== null && ep.air_date > TODAY
+              const upcoming = (ep.air_date !== null && ep.air_date > TODAY) || !isAired(item, ref)
               return (
                 <li key={ep.episode_number}>
                   <label
