@@ -19,7 +19,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-dvh pb-20 md:pb-0">
-      <header className="sticky top-0 z-20 border-b border-line bg-surface/90 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] border-line bg-surface/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
           <span className="flex items-center gap-2 font-semibold tracking-tight">
             <img src="/favicon.svg" alt="" className="size-7" />
