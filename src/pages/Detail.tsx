@@ -191,8 +191,13 @@ export default function Detail() {
       </Link>
 
       <div className="flex flex-col gap-6 sm:flex-row">
-        <div className="mx-auto aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-lg bg-panel-hover sm:mx-0 sm:w-48 lg:w-56">
-          {item.poster_url && <img src={item.poster_url} alt="" className="size-full object-cover" />}
+        {/* self-start: anders rekt de flex-rij het vak uit tot de hoogte van de kolom ernaast */}
+        <div className="mx-auto w-40 shrink-0 self-center sm:sticky sm:top-20 sm:mx-0 sm:w-48 sm:self-start lg:w-56">
+          {item.poster_url ? (
+            <img src={item.poster_url} alt="" className="block h-auto w-full rounded-lg shadow-lg" />
+          ) : (
+            <div className="aspect-[2/3] w-full rounded-lg bg-panel-hover" />
+          )}
         </div>
 
         <div className="min-w-0 flex-1 space-y-6">

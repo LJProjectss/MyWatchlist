@@ -84,7 +84,7 @@ export default function AddDialog({
         className="max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-panel p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-w-lg sm:rounded-2xl"
       >
         <div className="flex gap-4">
-          <div className="aspect-[2/3] w-16 shrink-0 overflow-hidden rounded-md bg-panel-hover">
+          <div className="aspect-[2/3] w-16 shrink-0 self-start overflow-hidden rounded-md bg-panel-hover">
             {result.poster_url && <img src={result.poster_url} alt="" className="size-full object-cover" />}
           </div>
           <div className="min-w-0">

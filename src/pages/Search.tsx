@@ -118,7 +118,7 @@ export default function Search() {
           const ownedId = owned.get(keyOf(r))
           return (
             <li key={keyOf(r)} className="flex gap-3 rounded-lg border border-line bg-panel p-3">
-              <div className="aspect-[2/3] w-16 shrink-0 overflow-hidden rounded bg-panel-hover sm:w-20">
+              <div className="aspect-[2/3] w-16 shrink-0 self-start overflow-hidden rounded bg-panel-hover sm:w-20">
                 {r.poster_url && <img src={r.poster_url} alt="" loading="lazy" className="size-full object-cover" />}
               </div>
               <div className="flex min-w-0 flex-1 flex-col">
