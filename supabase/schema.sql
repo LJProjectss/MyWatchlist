@@ -113,3 +113,6 @@ create policy "eigen afleveringen" on public.watched_episodes
 drop policy if exists "eigen kijkgeschiedenis" on public.watch_history;
 create policy "eigen kijkgeschiedenis" on public.watch_history
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Supabase de nieuwe kolommen direct laten zien (anders soms "schema cache"-fouten)
+notify pgrst, 'reload schema';
