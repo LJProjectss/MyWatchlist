@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import EpisodeTracker from '../components/EpisodeTracker'
 import RatingPicker from '../components/RatingPicker'
 import StatusPicker from '../components/StatusPicker'
-import { externalLinks } from '../lib/catalog'
+import { externalLinks, totalEpisodes } from '../lib/catalog'
+import { fetchSeasons, hasEpisodes, loadWatched } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
 import { MEDIA_LABELS, type WatchlistItem } from '../lib/types'
 
@@ -13,6 +15,24 @@ export default function Detail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
+  // null zolang de voortgang laadt, zodat het juiste seizoen meteen openklapt
+  const [watched, setWatched] = useState<Set<string> | null>(null)
+
+  async function refreshEpisodes(loaded: WatchlistItem) {
+    try {
+      setWatched((await loadWatched([loaded.id])).get(loaded.id) ?? new Set())
+    } catch (e) {
+      setWatched(new Set())
+      setError(`Afleveringen laden mislukt: ${e instanceof Error ? e.message : String(e)}`)
+    }
+    // Nieuwe seizoenen of afleveringen bijwerken; als de bron niet bereikbaar is, gebruiken we de opgeslagen indeling
+    const seasons = await fetchSeasons(loaded).catch(() => null)
+    if (seasons && JSON.stringify(seasons) !== JSON.stringify(loaded.seasons)) {
+      const changes = { seasons, total_episodes: totalEpisodes(seasons) }
+      setItem((current) => (current ? { ...current, ...changes } : current))
+      await supabase.from('watchlist_items').update(changes).eq('id', loaded.id)
+    }
+  }
 
   useEffect(() => {
     supabase
@@ -25,18 +45,18 @@ export default function Detail() {
         setItem(data as WatchlistItem | null)
         setNotes(data?.notes ?? '')
         setLoading(false)
+        if (data && hasEpisodes(data)) refreshEpisodes(data as WatchlistItem)
       })
   }, [id])
 
   // Wijzigingen direct opslaan; bij een fout de oude waarde terugzetten
   async function update(changes: Partial<WatchlistItem>) {
     if (!item) return
-    const previous = item
-    setItem({ ...item, ...changes })
+    setItem((current) => (current ? { ...current, ...changes } : current))
     setError(null)
     const { error } = await supabase.from('watchlist_items').update(changes).eq('id', item.id)
     if (error) {
-      setItem(previous)
+      setItem((current) => (current ? { ...current, ...pick(item, changes) } : current))
       setError(`Opslaan mislukt: ${error.message}`)
     }
   }
@@ -119,6 +139,22 @@ export default function Detail() {
           </button>
         </div>
       </div>
+
+      {hasEpisodes(item) && (
+        <section className="space-y-3 border-t border-line pt-6">
+          <h2 className="text-lg font-semibold">Afleveringen</h2>
+          {watched ? (
+            <EpisodeTracker item={item} watched={watched} onWatchedChange={setWatched} onItemChange={update} />
+          ) : (
+            <p className="text-sm text-muted">Laden…</p>
+          )}
+        </section>
+      )}
     </div>
   )
+}
+
+// De oude waarden van precies de velden die we probeerden te wijzigen
+function pick(item: WatchlistItem, changes: Partial<WatchlistItem>): Partial<WatchlistItem> {
+  return Object.fromEntries(Object.keys(changes).map((key) => [key, item[key as keyof WatchlistItem]]))
 }

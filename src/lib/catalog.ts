@@ -1,4 +1,4 @@
-import type { MediaType, Source } from './types'
+import type { MediaType, SeasonInfo, Source } from './types'
 
 // Zoekresultaat uit TMDB of Jikan, in één vorm zodat de UI het verschil niet hoeft te kennen.
 export interface CatalogResult {
@@ -15,7 +15,7 @@ export interface CatalogResult {
 }
 
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w342'
-const JIKAN = 'https://api.jikan.moe/v4'
+export const JIKAN = 'https://api.jikan.moe/v4'
 
 export async function tmdb<T>(path: string, params: Record<string, string> = {}): Promise<T> {
   const res = await fetch(`/api/tmdb/${path}?${new URLSearchParams(params)}`)
@@ -102,16 +102,37 @@ export async function searchJikan(query: string): Promise<CatalogResult[]> {
 
 // Extra gegevens die niet in de zoekresultaten zitten, zoals de IMDb-ID en het aantal afleveringen.
 export async function fetchExtraDetails(result: CatalogResult) {
-  if (result.source !== 'tmdb') return { imdb_id: null, total_episodes: result.total_episodes }
+  if (result.source === 'jikan') {
+    return { imdb_id: null, total_episodes: result.total_episodes, seasons: animeSeasons(result.total_episodes) }
+  }
   if (result.media_type === 'movie') {
     const movie = await tmdb<{ imdb_id: string | null }>(`movie/${result.external_id}`)
-    return { imdb_id: movie.imdb_id, total_episodes: null }
+    return { imdb_id: movie.imdb_id, total_episodes: null, seasons: null }
   }
-  const tv = await tmdb<{ number_of_episodes: number | null; external_ids?: { imdb_id: string | null } }>(
-    `tv/${result.external_id}`,
-    { append_to_response: 'external_ids' },
-  )
-  return { imdb_id: tv.external_ids?.imdb_id ?? null, total_episodes: tv.number_of_episodes }
+  const tv = await fetchTmdbShow(result.external_id)
+  return { imdb_id: tv.imdb_id, total_episodes: totalEpisodes(tv.seasons), seasons: tv.seasons }
+}
+
+interface TmdbShow {
+  external_ids?: { imdb_id: string | null }
+  seasons?: { season_number: number; name: string; episode_count: number }[]
+}
+
+export async function fetchTmdbShow(id: string) {
+  const tv = await tmdb<TmdbShow>(`tv/${id}`, { append_to_response: 'external_ids' })
+  // Seizoen 0 bevat specials; die laten we buiten de voortgang
+  const seasons: SeasonInfo[] = (tv.seasons ?? [])
+    .filter((s) => s.season_number > 0 && s.episode_count > 0)
+    .map((s) => ({ season_number: s.season_number, name: s.name, episode_count: s.episode_count }))
+  return { imdb_id: tv.external_ids?.imdb_id ?? null, seasons }
+}
+
+export function animeSeasons(episodes: number | null): SeasonInfo[] | null {
+  return episodes ? [{ season_number: 1, name: 'Afleveringen', episode_count: episodes }] : null
+}
+
+export function totalEpisodes(seasons: SeasonInfo[] | null) {
+  return seasons ? seasons.reduce((sum, s) => sum + s.episode_count, 0) : null
 }
 
 export function externalLinks(item: { source: Source; media_type: MediaType; external_id: string; imdb_id: string | null }) {

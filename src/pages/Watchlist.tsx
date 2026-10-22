@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ContinueWatching from '../components/ContinueWatching'
+import ProgressBar from '../components/ProgressBar'
+import { totalEpisodes } from '../lib/catalog'
+import {
+  countWatched,
+  epKey,
+  hasEpisodes,
+  loadWatched,
+  nextEpisode,
+  setEpisodesWatched,
+  statusAfterProgress,
+} from '../lib/episodes'
 import { supabase } from '../lib/supabase'
 import { MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 
@@ -12,18 +24,51 @@ export default function Watchlist() {
   const [error, setError] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [watched, setWatched] = useState<Map<string, Set<string>>>(new Map())
 
   useEffect(() => {
     supabase
       .from('watchlist_items')
       .select('*')
       .order('updated_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) setError(error.message)
-        else setItems(data as WatchlistItem[])
+      .then(async ({ data, error }) => {
+        if (error) {
+          setError(error.message)
+        } else {
+          const loaded = data as WatchlistItem[]
+          setItems(loaded)
+          // Zonder afleveringsvoortgang werkt de lijst nog steeds, dus een fout hier negeren we
+          loadWatched(loaded.filter(hasEpisodes).map((i) => i.id))
+            .then(setWatched)
+            .catch(() => {})
+        }
         setLoading(false)
       })
   }, [])
+
+  const inProgress = useMemo(
+    () => items.filter((i) => i.status === 'watching' && hasEpisodes(i) && i.seasons?.length),
+    [items],
+  )
+
+  async function markNext(item: WatchlistItem) {
+    const seen = watched.get(item.id) ?? new Set<string>()
+    const next = nextEpisode(item.seasons, seen)
+    if (!next) return
+    const updated = new Set(seen).add(epKey(next.season_number, next.episode_number))
+    setWatched((prev) => new Map(prev).set(item.id, updated))
+    try {
+      await setEpisodesWatched(item.id, [next], true)
+      const status = statusAfterProgress(item, countWatched(item.seasons, updated))
+      if (status !== item.status) {
+        await supabase.from('watchlist_items').update({ status }).eq('id', item.id)
+        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)))
+      }
+    } catch (e) {
+      setWatched((prev) => new Map(prev).set(item.id, seen))
+      setError(`Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
 
   const visible = useMemo(
     () =>
@@ -55,6 +100,8 @@ export default function Watchlist() {
           />
         </div>
       </div>
+
+      <ContinueWatching items={inProgress} watched={watched} onMarkNext={markNext} />
 
       {loading && <p className="text-muted">Laden…</p>}
       {error && <p className="text-red-400">Kon je lijst niet laden: {error}</p>}
@@ -91,6 +138,13 @@ export default function Watchlist() {
                     {MEDIA_LABELS[item.media_type]}
                     {item.year ? ` · ${item.year}` : ''}
                   </p>
+                  {hasEpisodes(item) && watched.has(item.id) && (
+                    <ProgressBar
+                      value={countWatched(item.seasons, watched.get(item.id)!)}
+                      max={totalEpisodes(item.seasons) ?? 0}
+                      className="mt-2"
+                    />
+                  )}
                   <div className="flex items-center justify-between pt-1 text-xs">
                     <span className="text-muted">{STATUS_LABELS[item.status]}</span>
                     {item.rating && <span className="font-semibold text-amber-400">★ {item.rating}</span>}

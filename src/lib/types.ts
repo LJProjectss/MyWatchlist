@@ -14,11 +14,19 @@ export interface WatchlistItem {
   poster_url: string | null
   year: number | null
   total_episodes: number | null
+  // Opgeslagen seizoensindeling, zodat het overzicht de volgende aflevering kan tonen zonder API-aanroep
+  seasons: SeasonInfo[] | null
   status: WatchStatus
   rating: number | null
   notes: string | null
   created_at: string
   updated_at: string
+}
+
+export interface SeasonInfo {
+  season_number: number
+  name: string
+  episode_count: number
 }
 
 export interface WatchedEpisode {

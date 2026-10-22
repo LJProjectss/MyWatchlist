@@ -31,6 +31,10 @@ Gebouwd met React, Vite, Tailwind CSS en Supabase (inloggen en database). Bedoel
 
 De sleutel blijft geheim: de browser praat met een Netlify Function (`netlify/functions/tmdb.mts`), die TMDB aanroept. Anime komt van [Jikan](https://jikan.moe) (MyAnimeList) en heeft geen sleutel nodig.
 
+## Updates
+
+Als `supabase/schema.sql` is veranderd, voer je het hele bestand opnieuw uit in de SQL Editor. Bestaande gegevens blijven gewoon staan.
+
 ## Lokaal ontwikkelen
 
 ```bash

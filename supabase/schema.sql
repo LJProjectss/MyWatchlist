@@ -1,5 +1,6 @@
 -- MyWatchlist databaseschema
 -- Plak dit in Supabase: SQL Editor -> New query -> Run.
+-- Je kunt dit bestand veilig opnieuw uitvoeren na een update; bestaande gegevens blijven staan.
 
 create table if not exists public.watchlist_items (
   id              uuid primary key default gen_random_uuid(),
@@ -13,6 +14,7 @@ create table if not exists public.watchlist_items (
   poster_url      text,
   year            integer,
   total_episodes  integer,
+  seasons         jsonb,
   status          text not null default 'plan_to_watch'
                   check (status in ('watching', 'completed', 'plan_to_watch', 'on_hold', 'dropped')),
   rating          smallint check (rating between 1 and 10),
@@ -21,6 +23,9 @@ create table if not exists public.watchlist_items (
   updated_at      timestamptz not null default now(),
   unique (user_id, source, media_type, external_id)
 );
+
+-- Voor databases die met een eerdere versie van dit bestand zijn gemaakt
+alter table public.watchlist_items add column if not exists seasons jsonb;
 
 create table if not exists public.watched_episodes (
   id              uuid primary key default gen_random_uuid(),

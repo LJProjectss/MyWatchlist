@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { fetchExtraDetails, type CatalogResult } from '../lib/catalog'
+import { setEpisodesWatched } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
 import { MEDIA_LABELS, type WatchStatus, type WatchlistItem } from '../lib/types'
 import RatingPicker from './RatingPicker'
@@ -36,12 +37,23 @@ export default function AddDialog({
           poster_url: result.poster_url,
           year: result.year,
           total_episodes: extra.total_episodes,
+          seasons: extra.seasons,
           status,
           rating,
         })
         .select()
         .single()
       if (error) throw new Error(error.message)
+      // Al helemaal gezien? Dan meteen alle afleveringen afvinken.
+      if (status === 'completed' && extra.seasons) {
+        await setEpisodesWatched(
+          data.id,
+          extra.seasons.flatMap((s) =>
+            Array.from({ length: s.episode_count }, (_, i) => ({ season_number: s.season_number, episode_number: i + 1 })),
+          ),
+          true,
+        )
+      }
       onAdded(data as WatchlistItem)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
