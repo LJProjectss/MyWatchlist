@@ -99,5 +99,7 @@ function translateError(message: string) {
   if (message.includes('Invalid login credentials')) return 'E-mailadres of wachtwoord klopt niet.'
   if (message.includes('Email not confirmed')) return 'Bevestig eerst je e-mailadres via de link in je mail.'
   if (message.includes('User already registered')) return 'Er bestaat al een account met dit e-mailadres.'
+  if (/fetch|network/i.test(message))
+    return 'Kan Supabase niet bereiken. Controleer VITE_SUPABASE_URL in Netlify (bijv. https://abcdefgh.supabase.co) en of een adblocker het verzoek tegenhoudt.'
   return message
 }
