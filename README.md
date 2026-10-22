@@ -23,14 +23,20 @@ Gebouwd met React, Vite, Tailwind CSS en Supabase (inloggen en database). Bedoel
 
 > Wil je dat alleen jij een account kunt maken? Zet in Supabase onder **Authentication → Sign In / Providers** de optie **Allow new users to sign up** uit nadat je je eigen account hebt aangemaakt.
 
-### 3. TMDB (voor zoeken, volgende stap)
+### 3. TMDB (zoeken naar films en series)
 
-Vraag op [themoviedb.org](https://www.themoviedb.org/settings/api) een gratis API-sleutel aan en zet het **API Read Access Token** in Netlify als `TMDB_API_TOKEN`. Jikan heeft geen sleutel nodig.
+1. Maak een gratis account op [themoviedb.org](https://www.themoviedb.org/signup) en vraag onder [Settings → API](https://www.themoviedb.org/settings/api) een API-sleutel aan (kies *Developer*, persoonlijk gebruik).
+2. Kopieer het **API Read Access Token** (de lange sleutel) en zet het in Netlify onder **Environment variables** als `TMDB_API_TOKEN`.
+3. Start een nieuwe deploy.
+
+De sleutel blijft geheim: de browser praat met een Netlify Function (`netlify/functions/tmdb.mts`), die TMDB aanroept. Anime komt van [Jikan](https://jikan.moe) (MyAnimeList) en heeft geen sleutel nodig.
 
 ## Lokaal ontwikkelen
 
 ```bash
 cp .env.example .env   # en vul je eigen waarden in
 npm install
-npm run dev
+npx netlify dev   # start de app inclusief de TMDB-function
 ```
+
+Met `npm run dev` werkt alles behalve zoeken in TMDB, omdat de Netlify Function dan niet draait.

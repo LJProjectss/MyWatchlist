@@ -75,23 +75,28 @@ export default function Watchlist() {
       {visible.length > 0 && (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {visible.map((item) => (
-            <li key={item.id} className="overflow-hidden rounded-lg border border-line bg-panel">
-              <div className="aspect-[2/3] bg-panel-hover">
-                {item.poster_url && (
-                  <img src={item.poster_url} alt="" loading="lazy" className="size-full object-cover" />
-                )}
-              </div>
-              <div className="space-y-1 p-3">
-                <p className="line-clamp-2 text-sm font-medium leading-snug">{item.title}</p>
-                <p className="text-xs text-muted">
-                  {MEDIA_LABELS[item.media_type]}
-                  {item.year ? ` · ${item.year}` : ''}
-                </p>
-                <div className="flex items-center justify-between pt-1 text-xs">
-                  <span className="text-muted">{STATUS_LABELS[item.status]}</span>
-                  {item.rating && <span className="font-semibold text-amber-400">★ {item.rating}</span>}
+            <li key={item.id}>
+              <Link
+                to={`/titel/${item.id}`}
+                className="block h-full overflow-hidden rounded-lg border border-line bg-panel transition hover:border-accent/60"
+              >
+                <div className="aspect-[2/3] bg-panel-hover">
+                  {item.poster_url && (
+                    <img src={item.poster_url} alt="" loading="lazy" className="size-full object-cover" />
+                  )}
                 </div>
-              </div>
+                <div className="space-y-1 p-3">
+                  <p className="line-clamp-2 text-sm font-medium leading-snug">{item.title}</p>
+                  <p className="text-xs text-muted">
+                    {MEDIA_LABELS[item.media_type]}
+                    {item.year ? ` · ${item.year}` : ''}
+                  </p>
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <span className="text-muted">{STATUS_LABELS[item.status]}</span>
+                    {item.rating && <span className="font-semibold text-amber-400">★ {item.rating}</span>}
+                  </div>
+                </div>
+              </Link>
             </li>
           ))}
         </ul>

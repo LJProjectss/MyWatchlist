@@ -1,0 +1,124 @@
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import RatingPicker from '../components/RatingPicker'
+import StatusPicker from '../components/StatusPicker'
+import { externalLinks } from '../lib/catalog'
+import { supabase } from '../lib/supabase'
+import { MEDIA_LABELS, type WatchlistItem } from '../lib/types'
+
+export default function Detail() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [item, setItem] = useState<WatchlistItem | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    supabase
+      .from('watchlist_items')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) setError(error.message)
+        setItem(data as WatchlistItem | null)
+        setNotes(data?.notes ?? '')
+        setLoading(false)
+      })
+  }, [id])
+
+  // Wijzigingen direct opslaan; bij een fout de oude waarde terugzetten
+  async function update(changes: Partial<WatchlistItem>) {
+    if (!item) return
+    const previous = item
+    setItem({ ...item, ...changes })
+    setError(null)
+    const { error } = await supabase.from('watchlist_items').update(changes).eq('id', item.id)
+    if (error) {
+      setItem(previous)
+      setError(`Opslaan mislukt: ${error.message}`)
+    }
+  }
+
+  async function handleDelete() {
+    if (!item || !confirm(`“${item.title}” uit je lijst verwijderen?`)) return
+    const { error } = await supabase.from('watchlist_items').delete().eq('id', item.id)
+    if (error) setError(`Verwijderen mislukt: ${error.message}`)
+    else navigate('/', { replace: true })
+  }
+
+  if (loading) return <p className="text-muted">Laden…</p>
+  if (!item)
+    return (
+      <div className="space-y-3">
+        <p className="text-muted">{error ?? 'Deze titel staat niet (meer) in je lijst.'}</p>
+        <Link to="/" className="text-accent-hover hover:underline">
+          Terug naar je lijst
+        </Link>
+      </div>
+    )
+
+  return (
+    <div className="space-y-6">
+      <Link to="/" className="text-sm text-muted hover:text-white">
+        ← Mijn lijst
+      </Link>
+
+      <div className="flex flex-col gap-6 sm:flex-row">
+        <div className="mx-auto aspect-[2/3] w-40 shrink-0 overflow-hidden rounded-lg bg-panel-hover sm:mx-0 sm:w-48 lg:w-56">
+          {item.poster_url && <img src={item.poster_url} alt="" className="size-full object-cover" />}
+        </div>
+
+        <div className="min-w-0 flex-1 space-y-6">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{item.title}</h1>
+            {item.original_title && <p className="text-muted">{item.original_title}</p>}
+            <p className="mt-1 text-sm text-muted">
+              {[MEDIA_LABELS[item.media_type], item.year, item.total_episodes && `${item.total_episodes} afleveringen`]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+            <div className="mt-2 flex gap-3 text-sm">
+              {externalLinks(item).map((l) => (
+                <a key={l.label} href={l.href} target="_blank" rel="noreferrer" className="text-accent-hover hover:underline">
+                  {l.label} ↗
+                </a>
+              ))}
+            </div>
+          </div>
+
+          <section className="space-y-2">
+            <h2 className="text-sm text-muted">Status</h2>
+            <StatusPicker value={item.status} onChange={(status) => update({ status })} />
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-sm text-muted">Jouw cijfer</h2>
+            <div className="max-w-xl">
+              <RatingPicker value={item.rating} onChange={(rating) => update({ rating })} />
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-sm text-muted">Notities</h2>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={() => notes !== (item.notes ?? '') && update({ notes: notes || null })}
+              rows={3}
+              placeholder="Wat vond je ervan?"
+              className="w-full max-w-xl rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+          </section>
+
+          {error && <p className="text-sm text-red-400">{error}</p>}
+
+          <button onClick={handleDelete} className="text-sm text-red-400 hover:underline">
+            Verwijderen uit mijn lijst
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,8 +1,9 @@
 [build]
   command = "npm run build"
   publish = "dist"
+  functions = "netlify/functions"
 
-# Alle routes naar de React-app sturen (client-side routing)
+# Alle overige routes naar de React-app sturen (client-side routing)
 [[redirects]]
   from = "/*"
   to = "/index.html"

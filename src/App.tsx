@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import Layout from './components/Layout'
 import { isSupabaseConfigured } from './lib/supabase'
+import Detail from './pages/Detail'
 import Login from './pages/Login'
 import Search from './pages/Search'
 import SetupRequired from './pages/SetupRequired'
@@ -27,6 +28,7 @@ function AppRoutes() {
       <Route element={<Layout />}>
         <Route index element={<Watchlist />} />
         <Route path="zoeken" element={<Search />} />
+        <Route path="titel/:id" element={<Detail />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
