@@ -10,7 +10,7 @@ Gebouwd met React, Vite, Tailwind CSS en Supabase (inloggen en database). Bedoel
 
 1. Maak een gratis account op [supabase.com](https://supabase.com) en klik op **New project**.
 2. Open in je project **SQL Editor → New query**, plak de inhoud van [`supabase/schema.sql`](supabase/schema.sql) en klik op **Run**.
-3. Ga naar **Authentication → URL Configuration** en vul bij **Site URL** het adres van je Netlify-site in (bijvoorbeeld `https://mijn-watchlist.netlify.app`). Daar sturen bevestigingsmails naartoe.
+3. Ga naar **Authentication → URL Configuration** en vul bij **Site URL** het adres van je Netlify-site in (bijvoorbeeld `https://mijn-watchlist.netlify.app`, zonder `/` aan het eind) en voeg onder **Redirect URLs** hetzelfde adres met `/**` erachter toe (`https://mijn-watchlist.netlify.app/**`). Anders sturen de bevestigingsmails je naar `localhost`.
 4. Kopieer onder **Project Settings → API** de **Project URL** en de **anon public** key. Die heb je nodig bij Netlify.
 
 ### 2. Netlify (online zetten)
