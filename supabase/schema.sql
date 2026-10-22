@@ -22,6 +22,16 @@ create table if not exists public.watchlist_items (
   -- Cijfer per seizoen, bijv. {"1": 8, "2": 9}
   season_ratings  jsonb,
   notes           text,
+  -- Eigen labels, bijv. {"met vrienden", "favoriet"}
+  tags            text[] not null default '{}',
+  -- Prioriteit voor de Wil ik zien-lijst: 1 = hoog, 2 = normaal, 3 = laag
+  priority        smallint check (priority between 1 and 3),
+  -- Welke kijkbeurt nu loopt; bij herkijken gaat dit omhoog en blijft oude voortgang bewaard
+  current_watch   integer not null default 1,
+  -- Volgende uitzending en status van de serie, periodiek ververst uit TMDB/Jikan
+  next_air        jsonb,
+  show_status     text,
+  info_refreshed_at timestamptz,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
   unique (user_id, source, media_type, external_id)
@@ -31,25 +41,53 @@ create table if not exists public.watchlist_items (
 alter table public.watchlist_items add column if not exists seasons jsonb;
 alter table public.watchlist_items add column if not exists season_ratings jsonb;
 alter table public.watchlist_items alter column rating type numeric(3, 1);
+alter table public.watchlist_items add column if not exists tags text[] not null default '{}';
+alter table public.watchlist_items add column if not exists priority smallint check (priority between 1 and 3);
+alter table public.watchlist_items add column if not exists current_watch integer not null default 1;
+alter table public.watchlist_items add column if not exists next_air jsonb;
+alter table public.watchlist_items add column if not exists show_status text;
+alter table public.watchlist_items add column if not exists info_refreshed_at timestamptz;
 
 create table if not exists public.watched_episodes (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
   item_id         uuid not null references public.watchlist_items (id) on delete cascade,
+  -- Bij welke kijkbeurt (zie watchlist_items.current_watch) deze aflevering hoort
+  watch_number    integer not null default 1,
   season_number   integer not null default 1,
   episode_number  integer not null,
-  watched_at      timestamptz not null default now(),
-  unique (item_id, season_number, episode_number)
+  watched_at      timestamptz not null default now()
+);
+
+alter table public.watched_episodes add column if not exists watch_number integer not null default 1;
+alter table public.watched_episodes drop constraint if exists watched_episodes_item_id_season_number_episode_number_key;
+create unique index if not exists watched_episodes_unique_idx
+  on public.watched_episodes (item_id, watch_number, season_number, episode_number);
+
+-- Eén rij per keer dat je een film of serie helemaal hebt gezien
+create table if not exists public.watch_history (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  item_id         uuid not null references public.watchlist_items (id) on delete cascade,
+  watched_on      date not null default current_date,
+  created_at      timestamptz not null default now()
 );
 
 create index if not exists watchlist_items_user_idx on public.watchlist_items (user_id, updated_at desc);
 create index if not exists watched_episodes_item_idx on public.watched_episodes (item_id);
+create index if not exists watch_history_item_idx on public.watch_history (item_id);
 
--- updated_at automatisch bijwerken
+-- updated_at automatisch bijwerken, behalve als alleen automatisch ververste gegevens veranderen
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
+declare
+  auto_fields text[] := array['seasons', 'total_episodes', 'next_air', 'show_status', 'info_refreshed_at', 'updated_at'];
 begin
-  new.updated_at = now();
+  if (to_jsonb(new) - auto_fields) = (to_jsonb(old) - auto_fields) then
+    new.updated_at = old.updated_at;
+  else
+    new.updated_at = now();
+  end if;
   return new;
 end;
 $$;
@@ -62,6 +100,7 @@ create trigger watchlist_items_updated_at
 -- Iedere gebruiker ziet en wijzigt alleen zijn eigen gegevens
 alter table public.watchlist_items enable row level security;
 alter table public.watched_episodes enable row level security;
+alter table public.watch_history enable row level security;
 
 drop policy if exists "eigen items" on public.watchlist_items;
 create policy "eigen items" on public.watchlist_items
@@ -69,4 +108,8 @@ create policy "eigen items" on public.watchlist_items
 
 drop policy if exists "eigen afleveringen" on public.watched_episodes;
 create policy "eigen afleveringen" on public.watched_episodes
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "eigen kijkgeschiedenis" on public.watch_history;
+create policy "eigen kijkgeschiedenis" on public.watch_history
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

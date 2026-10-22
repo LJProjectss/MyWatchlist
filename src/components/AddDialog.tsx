@@ -47,7 +47,7 @@ export default function AddDialog({
       // Al helemaal gezien? Dan meteen alle afleveringen afvinken.
       if (status === 'completed' && extra.seasons) {
         await setEpisodesWatched(
-          data.id,
+          data,
           extra.seasons.flatMap((s) =>
             Array.from({ length: s.episode_count }, (_, i) => ({ season_number: s.season_number, episode_number: i + 1 })),
           ),

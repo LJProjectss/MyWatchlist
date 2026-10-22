@@ -58,7 +58,7 @@ export default function Watchlist() {
           const loaded = data as WatchlistItem[]
           setItems(loaded)
           // Zonder afleveringsvoortgang werkt de lijst nog steeds, dus een fout hier negeren we
-          loadWatched(loaded.filter(hasEpisodes).map((i) => i.id))
+          loadWatched(loaded.filter(hasEpisodes))
             .then(setWatched)
             .catch(() => {})
         }
@@ -78,7 +78,7 @@ export default function Watchlist() {
     const updated = new Set(seen).add(epKey(next.season_number, next.episode_number))
     setWatched((prev) => new Map(prev).set(item.id, updated))
     try {
-      await setEpisodesWatched(item.id, [next], true)
+      await setEpisodesWatched(item, [next], true)
       const status = statusAfterProgress(item, countWatched(item.seasons, updated))
       if (status !== item.status) {
         await supabase.from('watchlist_items').update({ status }).eq('id', item.id)

@@ -20,7 +20,7 @@ export default function Detail() {
 
   async function refreshEpisodes(loaded: WatchlistItem) {
     try {
-      setWatched((await loadWatched([loaded.id])).get(loaded.id) ?? new Set())
+      setWatched((await loadWatched([loaded])).get(loaded.id) ?? new Set())
     } catch (e) {
       setWatched(new Set())
       setError(`Afleveringen laden mislukt: ${e instanceof Error ? e.message : String(e)}`)

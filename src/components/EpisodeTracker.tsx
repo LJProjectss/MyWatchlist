@@ -45,7 +45,7 @@ export default function EpisodeTracker({
     onWatchedChange(updated)
     setError(null)
     try {
-      await setEpisodesWatched(item.id, episodes, value)
+      await setEpisodesWatched(item, episodes, value)
       const status = statusAfterProgress(item, countWatched(item.seasons, updated))
       if (status !== item.status) onItemChange({ status })
     } catch (e) {

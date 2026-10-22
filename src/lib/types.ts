@@ -21,8 +21,32 @@ export interface WatchlistItem {
   // Cijfer per seizoensnummer; het seriecijfer is dan het gemiddelde hiervan
   season_ratings: Record<string, number> | null
   notes: string | null
+  tags: string[]
+  priority: Priority | null
+  current_watch: number
+  next_air: NextAir | null
+  show_status: string | null
+  info_refreshed_at: string | null
   created_at: string
   updated_at: string
+}
+
+export type Priority = 1 | 2 | 3
+
+export const PRIORITY_LABELS: Record<Priority, string> = { 1: 'Hoog', 2: 'Normaal', 3: 'Laag' }
+
+// Eerstvolgende uitzending; voor anime zonder vaste datum alleen de uitzenddag
+export interface NextAir {
+  season_number: number
+  episode_number: number
+  air_date: string | null
+  broadcast?: string | null
+}
+
+export interface WatchHistoryEntry {
+  id: string
+  item_id: string
+  watched_on: string
 }
 
 export interface SeasonInfo {

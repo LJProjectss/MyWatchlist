@@ -8,3 +8,9 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# De service worker nooit cachen, anders komen updates niet door
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

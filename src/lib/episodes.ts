@@ -97,29 +97,38 @@ export function countWatched(seasons: SeasonInfo[] | null, watched: Set<string>)
   return count
 }
 
-export async function loadWatched(itemIds: string[]) {
+// Voortgang van de huidige kijkbeurt; afleveringen van eerdere keren kijken blijven bewaard maar tellen niet mee
+export async function loadWatched(items: Pick<WatchlistItem, 'id' | 'current_watch'>[]) {
   const byItem = new Map<string, Set<string>>()
-  if (itemIds.length === 0) return byItem
+  if (items.length === 0) return byItem
+  const currentWatch = new Map(items.map((i) => [i.id, i.current_watch ?? 1]))
   const { data, error } = await supabase
     .from('watched_episodes')
-    .select('item_id, season_number, episode_number')
-    .in('item_id', itemIds)
+    .select('item_id, watch_number, season_number, episode_number')
+    .in('item_id', items.map((i) => i.id))
   if (error) throw new Error(error.message)
   for (const row of data) {
+    if ((row.watch_number ?? 1) !== currentWatch.get(row.item_id)) continue
     if (!byItem.has(row.item_id)) byItem.set(row.item_id, new Set())
     byItem.get(row.item_id)!.add(epKey(row.season_number, row.episode_number))
   }
   return byItem
 }
 
-export async function setEpisodesWatched(itemId: string, episodes: EpisodeRef[], watched: boolean) {
+export async function setEpisodesWatched(
+  item: Pick<WatchlistItem, 'id' | 'current_watch'>,
+  episodes: EpisodeRef[],
+  watched: boolean,
+) {
   if (episodes.length === 0) return
+  const itemId = item.id
+  const watchNumber = item.current_watch ?? 1
   if (watched) {
     const { error } = await supabase
       .from('watched_episodes')
       .upsert(
-        episodes.map((e) => ({ item_id: itemId, ...e })),
-        { onConflict: 'item_id,season_number,episode_number', ignoreDuplicates: true },
+        episodes.map((e) => ({ item_id: itemId, watch_number: watchNumber, ...e })),
+        { onConflict: 'item_id,watch_number,season_number,episode_number', ignoreDuplicates: true },
       )
     if (error) throw new Error(error.message)
     return
@@ -132,6 +141,7 @@ export async function setEpisodesWatched(itemId: string, episodes: EpisodeRef[],
       .from('watched_episodes')
       .delete()
       .eq('item_id', itemId)
+      .eq('watch_number', watchNumber)
       .eq('season_number', season)
       .in('episode_number', numbers)
     if (error) throw new Error(error.message)
