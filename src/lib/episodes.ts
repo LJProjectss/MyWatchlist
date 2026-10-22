@@ -1,4 +1,4 @@
-import { animeSeasons, animeTitles, fetchTmdbShow, JIKAN, parseJikanDuration, tmdb, totalEpisodes } from './catalog'
+import { animeSeasons, animeTitles, englishTitle, fetchTmdbShow, JIKAN, parseJikanDuration, tmdb, totalEpisodes } from './catalog'
 import { supabase } from './supabase'
 import type { NextAir, SeasonInfo, WatchStatus, WatchlistItem } from './types'
 
@@ -43,7 +43,7 @@ export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
   const { data } = await res.json()
   const airing = data.status === 'Currently Airing'
   const runtime = parseJikanDuration(data.duration)
-  const titles = data.title ? animeTitles(data.title, data.title_english) : undefined
+  const titles = data.title ? animeTitles(data.title, englishTitle(data)) : undefined
   if (!airing) {
     return { seasons: animeSeasons(data.episodes), next_air: null, show_status: data.status ?? null, runtime, titles }
   }
@@ -95,11 +95,14 @@ export async function refreshShowInfo(item: WatchlistItem, watched: Set<string>)
   return changes
 }
 
+const TITLE_CHECK_SINCE = '2026-10-22T17:00:00Z'
+
 const REFRESH_AFTER_MS = 12 * 60 * 60 * 1000
 
 export function needsRefresh(item: WatchlistItem) {
-  // Anime één keer verversen, ook als ze op "wil ik zien" staan, zodat de Engelse titel erbij komt
-  if (item.source === 'jikan' && !item.info_refreshed_at) return true
+  // Anime zonder Engelse titel één keer opnieuw controleren sinds die functie bestaat,
+  // ook als ze op "wil ik zien" staan
+  if (item.source === 'jikan' && !item.original_title && (item.info_refreshed_at ?? '') < TITLE_CHECK_SINCE) return true
   if (!hasEpisodes(item) || item.status === 'dropped' || item.status === 'plan_to_watch') return false
   if (!item.info_refreshed_at) return true
   return Date.now() - new Date(item.info_refreshed_at).getTime() > REFRESH_AFTER_MS

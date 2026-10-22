@@ -13,18 +13,37 @@ import { supabase } from '../lib/supabase'
 import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchHistoryEntry, type WatchlistItem } from '../lib/types'
 import { loadHistory, recordCompletion } from '../lib/history'
 import { displayTitle, secondaryTitle } from '../lib/titles'
+import {
+  cacheItemChanges,
+  cacheItemWatched,
+  cacheRemoveItem,
+  getCachedItem,
+  getCachedItems,
+  getCachedWatched,
+} from '../lib/cache'
 
 export default function Detail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [item, setItem] = useState<WatchlistItem | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Uit de onthouden lijst, zodat de pagina meteen verschijnt; daarna verversen we op de achtergrond
+  const [item, setItem] = useState<WatchlistItem | null>(() => getCachedItem(id))
+  const [loading, setLoading] = useState(() => getCachedItem(id) === null)
   const [error, setError] = useState<string | null>(null)
-  const [notes, setNotes] = useState('')
+  const [notes, setNotes] = useState(() => getCachedItem(id)?.notes ?? '')
   // null zolang de voortgang laadt, zodat het juiste seizoen meteen openklapt
   const [history, setHistory] = useState<WatchHistoryEntry[]>([])
-  const [allTags, setAllTags] = useState<string[]>([])
-  const [watched, setWatched] = useState<Set<string> | null>(null)
+  const [allTags, setAllTags] = useState<string[]>(() =>
+    [...new Set((getCachedItems() ?? []).flatMap((i) => i.tags ?? []))].sort(),
+  )
+  const [watched, setWatched] = useState<Set<string> | null>(() => (id && getCachedWatched()?.get(id)) || null)
+
+  // Wijzigingen ook in de onthouden lijst zetten, zodat je lijst klopt als je teruggaat
+  useEffect(() => {
+    if (item) cacheItemChanges(item.id, item)
+  }, [item])
+  useEffect(() => {
+    if (item && watched) cacheItemWatched(item.id, watched)
+  }, [item, watched])
 
   async function refreshEpisodes(loaded: WatchlistItem) {
     let seen = new Set<string>()
@@ -58,7 +77,12 @@ export default function Detail() {
       .eq('id', id)
       .maybeSingle()
       .then(({ data, error }) => {
-        if (error) setError(error.message)
+        if (error) {
+          // Offline of storing: dan blijft de onthouden versie staan
+          if (!getCachedItem(id)) setError(error.message)
+          setLoading(false)
+          return
+        }
         setItem(data as WatchlistItem | null)
         setNotes(data?.notes ?? '')
         setLoading(false)
@@ -106,7 +130,10 @@ export default function Detail() {
     if (!item || !confirm(`“${displayTitle(item)}” uit je lijst verwijderen?`)) return
     const { error } = await supabase.from('watchlist_items').delete().eq('id', item.id)
     if (error) setError(`Verwijderen mislukt: ${error.message}`)
-    else navigate('/', { replace: true })
+    else {
+      cacheRemoveItem(item.id)
+      navigate('/', { replace: true })
+    }
   }
 
   if (loading) return <p className="text-muted">Laden…</p>

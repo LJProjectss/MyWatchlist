@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import WatchTime from '../components/WatchTime'
+import { getCachedItems } from '../lib/cache'
 import { supabase } from '../lib/supabase'
 import { formatRating, MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 import { displayTitle } from '../lib/titles'
 
 export default function Stats() {
-  const [items, setItems] = useState<WatchlistItem[] | null>(null)
+  const [items, setItems] = useState<WatchlistItem[] | null>(getCachedItems)
   const [episodes, setEpisodes] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -15,8 +16,12 @@ export default function Stats() {
       .from('watchlist_items')
       .select('*')
       .then(({ data, error }) => {
-        if (error) setError(error.message)
-        else setItems(data as WatchlistItem[])
+        if (error) {
+          if (!getCachedItems()) setError(error.message)
+          return
+        }
+        // Alleen bijwerken als er echt iets veranderd is, anders wordt de kijktijd onnodig opnieuw berekend
+        setItems((current) => (JSON.stringify(sortById(current)) === JSON.stringify(sortById(data)) ? current : data))
       })
     supabase
       .from('watched_episodes')
@@ -165,4 +170,8 @@ function BarList({ rows }: { rows: { label: string; count: number; note?: string
       ))}
     </ul>
   )
+}
+
+function sortById(list: WatchlistItem[] | null) {
+  return list ? [...list].sort((a, b) => a.id.localeCompare(b.id)) : null
 }

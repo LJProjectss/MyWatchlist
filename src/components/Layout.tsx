@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { databaseIsUpToDate } from '../lib/schemaVersion'
+import { useScrollRestoration } from '../lib/useScrollRestoration'
 
 const NAV = [
   { to: '/', label: 'Mijn lijst', icon: ListIcon },
@@ -10,6 +11,7 @@ const NAV = [
 ]
 
 export default function Layout() {
+  useScrollRestoration()
   const [outdated, setOutdated] = useState(false)
   useEffect(() => {
     databaseIsUpToDate().then((ok) => setOutdated(!ok))

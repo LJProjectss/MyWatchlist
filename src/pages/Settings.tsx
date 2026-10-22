@@ -114,6 +114,8 @@ export default function Settings() {
           Uitloggen
         </button>
       </Section>
+
+      <p className="text-xs text-muted">Versie {__APP_VERSION__}</p>
     </div>
   )
 }

@@ -17,6 +17,7 @@ import {
   setEpisodesWatched,
   statusAfterProgress,
 } from '../lib/episodes'
+import { cacheItems, cacheWatched, getCachedItems, getCachedWatched } from '../lib/cache'
 import { recordCompletion } from '../lib/history'
 import { supabase } from '../lib/supabase'
 import { formatRating, MEDIA_LABELS, PRIORITY_LABELS, STATUS_LABELS, type Priority, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
@@ -42,8 +43,9 @@ const SORTS = {
 }
 
 export default function Watchlist() {
-  const [items, setItems] = useState<WatchlistItem[]>([])
-  const [loading, setLoading] = useState(true)
+  // Eerst de onthouden lijst tonen; de verse versie wordt op de achtergrond opgehaald
+  const [items, setItems] = useState<WatchlistItem[]>(() => getCachedItems() ?? [])
+  const [loading, setLoading] = useState(() => getCachedItems() === null)
   const [error, setError] = useState<string | null>(null)
   // Filters staan in de URL, zodat ze blijven staan als je terugkomt van een titel
   const [params, setParams] = useSearchParams()
@@ -61,13 +63,22 @@ export default function Watchlist() {
     else next.set(key, value)
     setParams(next, { replace: true })
   }
-  const [watched, setWatched] = useState<Map<string, Set<string>>>(new Map())
+  const [watched, setWatched] = useState<Map<string, Set<string>>>(() => getCachedWatched() ?? new Map())
+
+  useEffect(() => {
+    if (!loading) cacheItems(items)
+  }, [items, loading])
+  useEffect(() => {
+    if (!loading) cacheWatched(watched)
+  }, [watched, loading])
 
   // Nieuwe afleveringen en uitzenddata ophalen voor series die je volgt (één voor één, i.v.m. limieten van Jikan)
   async function refreshInBackground(loaded: WatchlistItem[], map: Map<string, Set<string>>) {
     for (const item of loaded.filter(needsRefresh).slice(0, 15)) {
       const changes = await refreshShowInfo(item, map.get(item.id) ?? new Set()).catch(() => null)
       if (changes) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...changes } : i)))
+      // Jikan staat maar een paar verzoeken per seconde toe
+      if (item.source === 'jikan') await new Promise((resolve) => setTimeout(resolve, 1200))
     }
   }
 
@@ -78,7 +89,8 @@ export default function Watchlist() {
       .order('updated_at', { ascending: false })
       .then(async ({ data, error }) => {
         if (error) {
-          setError(error.message)
+          // Met een onthouden lijst is een mislukte verversing geen reden om niets te tonen
+          if (!getCachedItems()) setError(error.message)
         } else {
           const loaded = data as WatchlistItem[]
           setItems(loaded)

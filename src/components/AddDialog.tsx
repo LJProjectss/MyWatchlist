@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { fetchExtraDetails, type CatalogResult } from '../lib/catalog'
+import { cacheAddItem } from '../lib/cache'
 import { setEpisodesWatched } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
 import { MEDIA_LABELS, type Priority, type WatchStatus, type WatchlistItem } from '../lib/types'
@@ -62,6 +63,7 @@ export default function AddDialog({
           true,
         )
       }
+      cacheAddItem(data as WatchlistItem)
       onAdded(data as WatchlistItem)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

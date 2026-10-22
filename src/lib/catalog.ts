@@ -71,6 +71,7 @@ interface JikanAnime {
   duration?: string | null
   title: string
   title_english: string | null
+  titles?: { type: string; title: string }[]
   type: string | null
   episodes: number | null
   year: number | null
@@ -94,7 +95,7 @@ export async function searchJikan(query: string): Promise<CatalogResult[]> {
         source: 'jikan',
         media_type: 'anime',
         external_id: String(a.mal_id),
-        ...animeTitles(a.title, a.title_english),
+        ...animeTitles(a.title, englishTitle(a)),
         year: a.year ?? parseYear(a.aired?.from),
         poster_url: a.images.webp?.large_image_url ?? a.images.jpg?.large_image_url ?? a.images.jpg?.image_url ?? null,
         overview: a.synopsis,
@@ -118,7 +119,7 @@ export async function fetchExtraDetails(result: CatalogResult) {
         const data = (await res.json()).data
         episodes = data?.episodes ?? episodes
         runtime = parseJikanDuration(data?.duration) ?? runtime
-        if (data?.title) titles = animeTitles(data.title, data.title_english)
+        if (data?.title) titles = animeTitles(data.title, englishTitle(data))
       }
     }
     return { imdb_id: null, total_episodes: episodes, seasons: animeSeasons(episodes), runtime, ...titles }
@@ -183,6 +184,11 @@ export function parseJikanDuration(duration: string | null | undefined) {
   const minutes = Number(duration.match(/(\d+)\s*min/)?.[1] ?? 0)
   const total = hours * 60 + minutes
   return total > 0 ? total : null
+}
+
+// Engelse titel uit Jikan: soms alleen in de lijst `titles` en niet in `title_english`
+export function englishTitle(data: { title_english?: string | null; titles?: { type: string; title: string }[] }) {
+  return data.title_english || data.titles?.find((t) => t.type === 'English')?.title || null
 }
 
 // Bij anime bewaren we de Engelse titel als `title` en de Japanse als `original_title`
