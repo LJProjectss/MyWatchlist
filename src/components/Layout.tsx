@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 const NAV = [
   { to: '/', label: 'Mijn lijst', icon: ListIcon },
   { to: '/zoeken', label: 'Zoeken', icon: SearchIcon },
+  { to: '/statistieken', label: 'Statistieken', icon: ChartIcon },
 ]
 
 export default function Layout() {
@@ -45,7 +46,7 @@ export default function Layout() {
       </main>
 
       {/* Onderste navigatiebalk op telefoon */}
-      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-2 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-3 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -77,6 +78,14 @@ function SearchIcon() {
     <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function ChartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" strokeLinecap="round" />
     </svg>
   )
 }

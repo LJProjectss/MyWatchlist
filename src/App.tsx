@@ -6,6 +6,7 @@ import Detail from './pages/Detail'
 import Login from './pages/Login'
 import Search from './pages/Search'
 import SetupRequired from './pages/SetupRequired'
+import Stats from './pages/Stats'
 import Watchlist from './pages/Watchlist'
 
 export default function App() {
@@ -29,6 +30,7 @@ function AppRoutes() {
         <Route index element={<Watchlist />} />
         <Route path="zoeken" element={<Search />} />
         <Route path="titel/:id" element={<Detail />} />
+        <Route path="statistieken" element={<Stats />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

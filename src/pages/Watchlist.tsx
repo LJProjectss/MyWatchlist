@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import ContinueWatching from '../components/ContinueWatching'
 import ProgressBar from '../components/ProgressBar'
 import { totalEpisodes } from '../lib/catalog'
@@ -17,13 +17,33 @@ import { MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type Wat
 
 type TypeFilter = MediaType | 'all'
 type StatusFilter = WatchStatus | 'all'
+type SortKey = keyof typeof SORTS
+
+const SORTS = {
+  recent: { label: 'Laatst bijgewerkt', compare: (a: WatchlistItem, b: WatchlistItem) => b.updated_at.localeCompare(a.updated_at) },
+  added: { label: 'Laatst toegevoegd', compare: (a: WatchlistItem, b: WatchlistItem) => b.created_at.localeCompare(a.created_at) },
+  title: { label: 'Titel (A–Z)', compare: (a: WatchlistItem, b: WatchlistItem) => a.title.localeCompare(b.title, 'nl') },
+  rating: { label: 'Hoogste cijfer', compare: (a: WatchlistItem, b: WatchlistItem) => (b.rating ?? 0) - (a.rating ?? 0) },
+  year: { label: 'Nieuwste eerst', compare: (a: WatchlistItem, b: WatchlistItem) => (b.year ?? 0) - (a.year ?? 0) },
+}
 
 export default function Watchlist() {
   const [items, setItems] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  // Filters staan in de URL, zodat ze blijven staan als je terugkomt van een titel
+  const [params, setParams] = useSearchParams()
+  const typeFilter = (params.get('soort') ?? 'all') as TypeFilter
+  const statusFilter = (params.get('status') ?? 'all') as StatusFilter
+  const sort = (params.get('sorteer') && params.get('sorteer')! in SORTS ? params.get('sorteer') : 'recent') as SortKey
+  const text = params.get('zoek') ?? ''
+
+  function setParam(key: string, value: string, defaultValue: string) {
+    const next = new URLSearchParams(params)
+    if (value === defaultValue) next.delete(key)
+    else next.set(key, value)
+    setParams(next, { replace: true })
+  }
   const [watched, setWatched] = useState<Map<string, Set<string>>>(new Map())
 
   useEffect(() => {
@@ -70,38 +90,59 @@ export default function Watchlist() {
     }
   }
 
-  const visible = useMemo(
-    () =>
-      items.filter(
-        (i) => (typeFilter === 'all' || i.media_type === typeFilter) && (statusFilter === 'all' || i.status === statusFilter),
-      ),
-    [items, typeFilter, statusFilter],
-  )
+  const visible = useMemo(() => {
+    const needle = text.trim().toLocaleLowerCase('nl')
+    return items
+      .filter(
+        (i) =>
+          (typeFilter === 'all' || i.media_type === typeFilter) &&
+          (statusFilter === 'all' || i.status === statusFilter) &&
+          (!needle || `${i.title} ${i.original_title ?? ''}`.toLocaleLowerCase('nl').includes(needle)),
+      )
+      .sort(SORTS[sort].compare)
+  }, [items, typeFilter, statusFilter, sort, text])
+
+  const filtered = visible.length !== items.length
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Mijn lijst</h1>
-          <p className="text-sm text-muted">
-            {items.length} {items.length === 1 ? 'titel' : 'titels'}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Mijn lijst</h1>
+        <p className="text-sm text-muted">
+          {filtered ? `${visible.length} van ` : ''}
+          {items.length} {items.length === 1 ? 'titel' : 'titels'}
+        </p>
+      </div>
+
+      <ContinueWatching items={inProgress} watched={watched} onMarkNext={markNext} />
+
+      {items.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex">
+          <input
+            type="search"
+            value={text}
+            onChange={(e) => setParam('zoek', e.target.value, '')}
+            placeholder="Zoek in je lijst…"
+            className="col-span-2 min-w-0 rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent sm:col-span-3 lg:flex-1"
+          />
           <Select
             value={typeFilter}
-            onChange={(v) => setTypeFilter(v as TypeFilter)}
+            onChange={(v) => setParam('soort', v, 'all')}
             options={[['all', 'Alle soorten'], ...Object.entries(MEDIA_LABELS)]}
           />
           <Select
             value={statusFilter}
-            onChange={(v) => setStatusFilter(v as StatusFilter)}
+            onChange={(v) => setParam('status', v, 'all')}
             options={[['all', 'Elke status'], ...Object.entries(STATUS_LABELS)]}
           />
+          <Select
+            value={sort}
+            onChange={(v) => setParam('sorteer', v, 'recent')}
+            options={Object.entries(SORTS).map(([key, { label }]) => [key, label])}
+            className="col-span-2 sm:col-span-1"
+          />
         </div>
-      </div>
-
-      <ContinueWatching items={inProgress} watched={watched} onMarkNext={markNext} />
+      )}
 
       {loading && <p className="text-muted">Laden…</p>}
       {error && <p className="text-red-400">Kon je lijst niet laden: {error}</p>}
@@ -157,7 +198,12 @@ export default function Watchlist() {
       )}
 
       {!loading && items.length > 0 && visible.length === 0 && (
-        <p className="text-muted">Geen titels die bij deze filters passen.</p>
+        <div className="space-y-2">
+          <p className="text-muted">Geen titels die bij deze filters passen.</p>
+          <button onClick={() => setParams({}, { replace: true })} className="text-sm text-accent-hover hover:underline">
+            Filters wissen
+          </button>
+        </div>
       )}
     </div>
   )
@@ -167,16 +213,18 @@ function Select({
   value,
   onChange,
   options,
+  className = '',
 }: {
   value: string
   onChange: (value: string) => void
   options: [string, string][]
+  className?: string
 }) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent"
+      className={`min-w-0 rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent ${className}`}
     >
       {options.map(([key, label]) => (
         <option key={key} value={key}>
