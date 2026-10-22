@@ -12,6 +12,7 @@ import { hasEpisodes, loadWatched, refreshShowInfo } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
 import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchHistoryEntry, type WatchlistItem } from '../lib/types'
 import { loadHistory, recordCompletion } from '../lib/history'
+import { displayTitle, secondaryTitle } from '../lib/titles'
 
 export default function Detail() {
   const { id } = useParams()
@@ -102,7 +103,7 @@ export default function Detail() {
   }
 
   async function handleDelete() {
-    if (!item || !confirm(`“${item.title}” uit je lijst verwijderen?`)) return
+    if (!item || !confirm(`“${displayTitle(item)}” uit je lijst verwijderen?`)) return
     const { error } = await supabase.from('watchlist_items').delete().eq('id', item.id)
     if (error) setError(`Verwijderen mislukt: ${error.message}`)
     else navigate('/', { replace: true })
@@ -136,8 +137,8 @@ export default function Detail() {
 
         <div className="min-w-0 flex-1 space-y-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{item.title}</h1>
-            {item.original_title && <p className="text-muted">{item.original_title}</p>}
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{displayTitle(item)}</h1>
+            {secondaryTitle(item) && <p className="text-muted">{secondaryTitle(item)}</p>}
             <p className="mt-1 text-sm text-muted">
               {[MEDIA_LABELS[item.media_type], item.year, item.total_episodes && `${item.total_episodes} afleveringen`]
                 .filter(Boolean)

@@ -20,6 +20,7 @@ import {
 import { recordCompletion } from '../lib/history'
 import { supabase } from '../lib/supabase'
 import { formatRating, MEDIA_LABELS, PRIORITY_LABELS, STATUS_LABELS, type Priority, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
+import { displayTitle } from '../lib/titles'
 
 type TypeFilter = MediaType | 'all'
 type StatusFilter = WatchStatus | 'all'
@@ -30,7 +31,7 @@ const PRIORITY_DOT: Record<Priority, string> = { 1: 'bg-rose-400', 2: 'bg-sky-40
 const SORTS = {
   recent: { label: 'Laatst bijgewerkt', compare: (a: WatchlistItem, b: WatchlistItem) => b.updated_at.localeCompare(a.updated_at) },
   added: { label: 'Laatst toegevoegd', compare: (a: WatchlistItem, b: WatchlistItem) => b.created_at.localeCompare(a.created_at) },
-  title: { label: 'Titel (A–Z)', compare: (a: WatchlistItem, b: WatchlistItem) => a.title.localeCompare(b.title, 'nl') },
+  title: { label: 'Titel (A–Z)', compare: (a: WatchlistItem, b: WatchlistItem) => displayTitle(a).localeCompare(displayTitle(b), 'nl') },
   rating: { label: 'Hoogste cijfer', compare: (a: WatchlistItem, b: WatchlistItem) => (b.rating ?? 0) - (a.rating ?? 0) },
   year: { label: 'Nieuwste eerst', compare: (a: WatchlistItem, b: WatchlistItem) => (b.year ?? 0) - (a.year ?? 0) },
   priority: {
@@ -113,7 +114,7 @@ export default function Watchlist() {
         setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)))
       }
       showToast({
-        text: `${item.title}: ${episodeLabel(item, next)} afgevinkt`,
+        text: `${displayTitle(item)}: ${episodeLabel(item, next)} afgevinkt`,
         undo: async () => {
           await setEpisodesWatched(item, [next], false)
           setWatched((prev) => new Map(prev).set(item.id, seen))
@@ -234,7 +235,7 @@ export default function Watchlist() {
                   <QuickTick item={item} watched={watched.get(item.id)} onTick={() => markNext(item)} />
                 </div>
                 <div className="space-y-1 p-3">
-                  <p className="line-clamp-2 text-sm font-medium leading-snug">{item.title}</p>
+                  <p className="line-clamp-2 text-sm font-medium leading-snug">{displayTitle(item)}</p>
                   <p className="text-xs text-muted">
                     {MEDIA_LABELS[item.media_type]}
                     {item.year ? ` · ${item.year}` : ''}
@@ -319,7 +320,7 @@ function QuickTick({
         e.stopPropagation()
         onTick()
       }}
-      aria-label={`${episodeLabel(item, next)} van ${item.title} als gekeken markeren`}
+      aria-label={`${episodeLabel(item, next)} van ${displayTitle(item)} als gekeken markeren`}
       className="absolute right-2 bottom-2 flex items-center gap-1 rounded-full bg-accent px-3 py-2 text-xs font-semibold text-white shadow-lg ring-2 ring-surface/60 active:scale-95"
     >
       ✓ {episodeLabel(item, next)}

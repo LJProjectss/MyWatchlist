@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { describeNextAir } from '../lib/episodes'
 import type { WatchlistItem } from '../lib/types'
+import { displayTitle } from '../lib/titles'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -28,7 +29,7 @@ export default function Upcoming({ items }: { items: WatchlistItem[] }) {
               to={`/titel/${item.id}`}
               className="flex flex-col gap-0.5 px-4 py-2.5 hover:bg-panel-hover sm:flex-row sm:items-center sm:gap-3"
             >
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.title}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{displayTitle(item)}</span>
               <span className="text-xs text-muted sm:shrink-0 sm:text-right">{describeNextAir(item)}</span>
             </Link>
           </li>

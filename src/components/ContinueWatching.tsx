@@ -3,6 +3,7 @@ import { totalEpisodes } from '../lib/catalog'
 import { countWatched, describeNextAir, episodeLabel, isAired, nextEpisode } from '../lib/episodes'
 import type { WatchlistItem } from '../lib/types'
 import ProgressBar from './ProgressBar'
+import { displayTitle } from '../lib/titles'
 
 export default function ContinueWatching({
   items,
@@ -31,7 +32,7 @@ export default function ContinueWatching({
               </Link>
               <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <Link to={`/titel/${item.id}`} className="truncate font-medium hover:underline">
-                  {item.title}
+                  {displayTitle(item)}
                 </Link>
                 <p className="text-xs text-muted">
                   {aired ? `Volgende: ${episodeLabel(item, next!)}` : 'Helemaal bij'} · {count}/{total}

@@ -4,6 +4,7 @@ import AddDialog from '../components/AddDialog'
 import { searchJikan, searchTmdb, type CatalogResult } from '../lib/catalog'
 import { supabase } from '../lib/supabase'
 import { MEDIA_LABELS, type WatchlistItem } from '../lib/types'
+import { displayTitle, secondaryTitle } from '../lib/titles'
 
 type Catalog = 'tmdb' | 'anime'
 
@@ -121,13 +122,13 @@ export default function Search() {
                 {r.poster_url && <img src={r.poster_url} alt="" loading="lazy" className="size-full object-cover" />}
               </div>
               <div className="flex min-w-0 flex-1 flex-col">
-                <p className="font-medium leading-snug">{r.title}</p>
+                <p className="font-medium leading-snug">{displayTitle(r)}</p>
                 <p className="text-xs text-muted">
                   {[r.subtype ?? MEDIA_LABELS[r.media_type], r.year, r.total_episodes && `${r.total_episodes} afl.`]
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
-                {r.original_title && <p className="truncate text-xs text-muted">{r.original_title}</p>}
+                {secondaryTitle(r) && <p className="truncate text-xs text-muted">{secondaryTitle(r)}</p>}
                 {r.overview && <p className="mt-1 line-clamp-2 text-sm text-muted">{r.overview}</p>}
                 <div className="mt-auto pt-2">
                   {ownedId ? (

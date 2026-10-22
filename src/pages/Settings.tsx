@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { downloadCsv, downloadJsonBackup } from '../lib/backup'
 import { supabase } from '../lib/supabase'
 import { getTheme, setTheme, type ThemeChoice } from '../lib/theme'
+import { getAnimeTitleMode, setAnimeTitleMode, type AnimeTitleMode } from '../lib/titles'
 
 const THEMES: [ThemeChoice, string][] = [
   ['system', 'Automatisch'],
@@ -10,9 +11,16 @@ const THEMES: [ThemeChoice, string][] = [
   ['dark', 'Donker'],
 ]
 
+const ANIME_TITLES: [AnimeTitleMode, string, string][] = [
+  ['both', 'Japans (Engels)', "Sousou no Frieren (Frieren: Beyond Journey's End)"],
+  ['japanese', 'Japans', 'Sousou no Frieren'],
+  ['english', 'Engels', "Frieren: Beyond Journey's End"],
+]
+
 export default function Settings() {
   const { session } = useAuth()
   const [theme, setThemeState] = useState(getTheme)
+  const [animeTitles, setAnimeTitlesState] = useState(getAnimeTitleMode)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -48,6 +56,29 @@ export default function Settings() {
             >
               {label}
             </button>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Anime-titels" description="Als er geen Engelse titel bestaat, zie je altijd de Japanse.">
+        <div className="space-y-1.5">
+          {ANIME_TITLES.map(([key, label, example]) => (
+            <label key={key} className="flex cursor-pointer items-start gap-3 rounded-md px-1 py-1.5">
+              <input
+                type="radio"
+                name="anime-titles"
+                checked={animeTitles === key}
+                onChange={() => {
+                  setAnimeTitleMode(key)
+                  setAnimeTitlesState(key)
+                }}
+                className="mt-1 size-4 accent-accent"
+              />
+              <span>
+                <span className="block text-sm">{label}</span>
+                <span className="block text-xs text-muted">{example}</span>
+              </span>
+            </label>
           ))}
         </div>
       </Section>

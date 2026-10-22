@@ -1,4 +1,4 @@
-import { animeSeasons, fetchTmdbShow, JIKAN, parseJikanDuration, tmdb, totalEpisodes } from './catalog'
+import { animeSeasons, animeTitles, fetchTmdbShow, JIKAN, parseJikanDuration, tmdb, totalEpisodes } from './catalog'
 import { supabase } from './supabase'
 import type { NextAir, SeasonInfo, WatchStatus, WatchlistItem } from './types'
 
@@ -24,6 +24,7 @@ export function episodeLabel(item: Pick<WatchlistItem, 'media_type'>, ep: Episod
 }
 
 export interface ShowInfo {
+  titles?: { title: string; original_title: string | null }
   runtime: number | null
   seasons: SeasonInfo[] | null
   next_air: NextAir | null
@@ -42,7 +43,10 @@ export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
   const { data } = await res.json()
   const airing = data.status === 'Currently Airing'
   const runtime = parseJikanDuration(data.duration)
-  if (!airing) return { seasons: animeSeasons(data.episodes), next_air: null, show_status: data.status ?? null, runtime }
+  const titles = data.title ? animeTitles(data.title, data.title_english) : undefined
+  if (!airing) {
+    return { seasons: animeSeasons(data.episodes), next_air: null, show_status: data.status ?? null, runtime, titles }
+  }
 
   // Bij lopende anime tellen we hoeveel afleveringen er al zijn; de volgende is dan de eerstvolgende uitzending
   await pause()
@@ -63,6 +67,7 @@ export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
     },
     show_status: data.status,
     runtime,
+    titles,
   }
 }
 
@@ -78,6 +83,9 @@ export async function refreshShowInfo(item: WatchlistItem, watched: Set<string>)
   if (JSON.stringify(info.next_air) !== JSON.stringify(item.next_air)) changes.next_air = info.next_air
   if (info.show_status !== item.show_status) changes.show_status = info.show_status
   if (info.runtime && info.runtime !== item.runtime) changes.runtime = info.runtime
+  if (info.titles && (info.titles.title !== item.title || info.titles.original_title !== item.original_title)) {
+    Object.assign(changes, info.titles)
+  }
 
   const updated = { ...item, ...changes }
   if (item.status === 'completed' && nextEpisode(updated.seasons, watched) && isAired(updated, nextEpisode(updated.seasons, watched)!)) {
@@ -90,6 +98,8 @@ export async function refreshShowInfo(item: WatchlistItem, watched: Set<string>)
 const REFRESH_AFTER_MS = 12 * 60 * 60 * 1000
 
 export function needsRefresh(item: WatchlistItem) {
+  // Anime één keer verversen, ook als ze op "wil ik zien" staan, zodat de Engelse titel erbij komt
+  if (item.source === 'jikan' && !item.info_refreshed_at) return true
   if (!hasEpisodes(item) || item.status === 'dropped' || item.status === 'plan_to_watch') return false
   if (!item.info_refreshed_at) return true
   return Date.now() - new Date(item.info_refreshed_at).getTime() > REFRESH_AFTER_MS

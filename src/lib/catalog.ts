@@ -90,13 +90,11 @@ export async function searchJikan(query: string): Promise<CatalogResult[]> {
   return data.data
     .filter((a) => !seen.has(a.mal_id) && seen.add(a.mal_id))
     .map((a) => {
-      const title = a.title_english || a.title
       return {
         source: 'jikan',
         media_type: 'anime',
         external_id: String(a.mal_id),
-        title,
-        original_title: title !== a.title ? a.title : null,
+        ...animeTitles(a.title, a.title_english),
         year: a.year ?? parseYear(a.aired?.from),
         poster_url: a.images.webp?.large_image_url ?? a.images.jpg?.large_image_url ?? a.images.jpg?.image_url ?? null,
         overview: a.synopsis,
@@ -112,16 +110,18 @@ export async function fetchExtraDetails(result: CatalogResult) {
   if (result.source === 'jikan') {
     let episodes = result.total_episodes
     let runtime = result.runtime ?? null
-    // Aanbevelingen van Jikan bevatten geen aantal afleveringen of speelduur; dan halen we die los op
-    if (episodes === null || runtime === null) {
+    let titles = { title: result.title, original_title: result.original_title }
+    // Aanbevelingen van Jikan bevatten geen Engelse titel, aantal afleveringen of speelduur; dan halen we die los op
+    if (episodes === null || runtime === null || !result.original_title) {
       const res = await fetch(`${JIKAN}/anime/${result.external_id}`)
       if (res.ok) {
         const data = (await res.json()).data
         episodes = data?.episodes ?? episodes
         runtime = parseJikanDuration(data?.duration) ?? runtime
+        if (data?.title) titles = animeTitles(data.title, data.title_english)
       }
     }
-    return { imdb_id: null, total_episodes: episodes, seasons: animeSeasons(episodes), runtime }
+    return { imdb_id: null, total_episodes: episodes, seasons: animeSeasons(episodes), runtime, ...titles }
   }
   if (result.media_type === 'movie') {
     const movie = await tmdb<{ imdb_id: string | null; runtime: number | null }>(`movie/${result.external_id}`)
@@ -183,4 +183,10 @@ export function parseJikanDuration(duration: string | null | undefined) {
   const minutes = Number(duration.match(/(\d+)\s*min/)?.[1] ?? 0)
   const total = hours * 60 + minutes
   return total > 0 ? total : null
+}
+
+// Bij anime bewaren we de Engelse titel als `title` en de Japanse als `original_title`
+export function animeTitles(japanese: string, english: string | null | undefined) {
+  const title = english || japanese
+  return { title, original_title: title !== japanese ? japanese : null }
 }

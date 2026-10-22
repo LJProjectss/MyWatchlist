@@ -6,6 +6,7 @@ import { MEDIA_LABELS, type Priority, type WatchStatus, type WatchlistItem } fro
 import PriorityPicker from './PriorityPicker'
 import RatingPicker from './RatingPicker'
 import StatusPicker from './StatusPicker'
+import { displayTitle } from '../lib/titles'
 
 export default function AddDialog({
   result,
@@ -36,8 +37,9 @@ export default function AddDialog({
           media_type: result.media_type,
           external_id: result.external_id,
           imdb_id: extra.imdb_id,
-          title: result.title,
-          original_title: result.original_title,
+          // Bij anime kan de detailinformatie een betere (Engelse) titel hebben
+          title: 'title' in extra ? extra.title : result.title,
+          original_title: 'original_title' in extra ? extra.original_title : result.original_title,
           poster_url: result.poster_url,
           year: result.year,
           total_episodes: extra.total_episodes,
@@ -85,7 +87,7 @@ export default function AddDialog({
           </div>
           <div className="min-w-0">
             <h2 id="add-title" className="font-semibold leading-snug">
-              {result.title}
+              {displayTitle(result)}
             </h2>
             <p className="text-sm text-muted">
               {MEDIA_LABELS[result.media_type]}

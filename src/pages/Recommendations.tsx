@@ -5,6 +5,7 @@ import type { CatalogResult } from '../lib/catalog'
 import { loadRecommendations, type Recommendation } from '../lib/recommendations'
 import { supabase } from '../lib/supabase'
 import { MEDIA_LABELS, type WatchlistItem } from '../lib/types'
+import { displayTitle } from '../lib/titles'
 
 type Filter = 'all' | 'tmdb' | 'jikan'
 
@@ -85,7 +86,7 @@ export default function Recommendations() {
                 )}
               </div>
               <div className="flex flex-1 flex-col gap-1 p-3">
-                <p className="line-clamp-2 text-sm font-medium leading-snug">{result.title}</p>
+                <p className="line-clamp-2 text-sm font-medium leading-snug">{displayTitle(result)}</p>
                 <p className="text-xs text-muted">
                   {MEDIA_LABELS[result.media_type]}
                   {result.year ? ` · ${result.year}` : ''}

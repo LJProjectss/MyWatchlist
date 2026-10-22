@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import WatchTime from '../components/WatchTime'
 import { supabase } from '../lib/supabase'
 import { formatRating, MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
+import { displayTitle } from '../lib/titles'
 
 export default function Stats() {
   const [items, setItems] = useState<WatchlistItem[] | null>(null)
@@ -33,7 +34,7 @@ export default function Stats() {
   }
   const distribution = Array.from({ length: 10 }, (_, i) => rated.filter((r) => Math.round(r.rating!) === i + 1).length)
   const maxCount = Math.max(1, ...distribution)
-  const top = [...rated].sort((a, b) => b.rating! - a.rating! || a.title.localeCompare(b.title, 'nl')).slice(0, 5)
+  const top = [...rated].sort((a, b) => b.rating! - a.rating! || displayTitle(a).localeCompare(displayTitle(b), 'nl')).slice(0, 5)
 
   return (
     <div className="space-y-8">
@@ -113,7 +114,7 @@ export default function Stats() {
                 <li key={item.id} className="flex items-center gap-3">
                   <span className="w-4 text-sm text-muted tabular-nums">{index + 1}</span>
                   <Link to={`/titel/${item.id}`} className="min-w-0 flex-1 truncate text-sm hover:underline">
-                    {item.title}
+                    {displayTitle(item)}
                   </Link>
                   <span className="text-sm font-semibold text-star">★ {formatRating(item.rating!)}</span>
                 </li>
