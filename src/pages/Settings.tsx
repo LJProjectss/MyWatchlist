@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { useAuth } from '../auth/AuthProvider'
+import PasswordForm from '../components/PasswordForm'
 import PushSettings from '../components/PushSettings'
 import ShareSettings from '../components/ShareSettings'
 import { downloadCsv, downloadJsonBackup, restoreJsonBackup } from '../lib/backup'
@@ -155,6 +156,10 @@ export default function Settings() {
       </Section>
 
       <Section title="Account" description={session?.user.email ? `Ingelogd als ${session.user.email}` : undefined}>
+        <div className="space-y-1.5">
+          <p className="text-sm">Wachtwoord wijzigen</p>
+          <PasswordForm />
+        </div>
         <button
           onClick={() => supabase.auth.signOut()}
           className="rounded-md border border-line px-4 py-2 text-sm text-bad hover:border-bad/60"

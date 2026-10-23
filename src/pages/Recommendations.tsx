@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import AddDialog from '../components/AddDialog'
 import type { CatalogResult } from '../lib/catalog'
 import { loadRecommendations, type Recommendation } from '../lib/recommendations'
-import { supabase } from '../lib/supabase'
+import { loadItems } from '../lib/items'
 import { MEDIA_LABELS, type WatchlistItem } from '../lib/types'
 import { displayTitle } from '../lib/titles'
 
@@ -24,10 +24,7 @@ export default function Recommendations() {
   const [added, setAdded] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    supabase
-      .from('watchlist_items')
-      .select('*')
-      .then(async ({ data, error }) => {
+    loadItems().then(async ({ data, error }) => {
         if (error) return setError(error.message)
         const items = data as WatchlistItem[]
         setHasSeeds(items.some((i) => i.rating !== null && i.rating >= 7))

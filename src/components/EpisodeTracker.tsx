@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { showToast } from '../lib/toast'
 import {
   countWatched,
   describeNextAir,
@@ -44,8 +45,15 @@ export default function EpisodeTracker({
   const nextAired = next !== null && isAired(item, next)
   const upcoming = describeNextAir(item)
 
+  // Altijd de nieuwste voortgang gebruiken, ook als er later via een melding nog iets wordt afgevinkt
+  const latest = useRef({ watched, item })
+  useEffect(() => {
+    latest.current = { watched, item }
+  })
+
   // Eerst lokaal bijwerken zodat afvinken direct voelt; bij een fout terugdraaien
   async function mark(episodes: EpisodeRef[], value: boolean) {
+    const { watched, item } = latest.current
     const previous = watched
     const updated = new Set(watched)
     for (const e of episodes) {
@@ -53,6 +61,7 @@ export default function EpisodeTracker({
       if (value) updated.add(key)
       else updated.delete(key)
     }
+    latest.current = { watched: updated, item }
     onWatchedChange(updated)
     setError(null)
     try {
@@ -60,9 +69,42 @@ export default function EpisodeTracker({
       const status = statusAfterProgress(item, countWatched(item.seasons, updated))
       if (status !== item.status) onItemChange({ status })
     } catch (e) {
+      latest.current = { watched: previous, item }
       onWatchedChange(previous)
       setError(`Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`)
     }
+  }
+
+  // Eerdere, al uitgezonden afleveringen die je nog niet hebt afgevinkt
+  function unwatchedBefore(ref: EpisodeRef, seen: Set<string>) {
+    return allEpisodes(seasons).filter(
+      (e) =>
+        (e.season_number < ref.season_number ||
+          (e.season_number === ref.season_number && e.episode_number < ref.episode_number)) &&
+        !seen.has(epKey(e.season_number, e.episode_number)) &&
+        isAired(item, e),
+    )
+  }
+
+  // Alles tot en met deze aflevering als gekeken markeren
+  function markUpTo(ref: EpisodeRef) {
+    return mark([...unwatchedBefore(ref, latest.current.watched), ref], true)
+  }
+
+  // Eén aflevering afvinken; staan er eerdere nog open, dan bieden we aan die ook af te vinken
+  async function tick(episodes: EpisodeRef[], value: boolean) {
+    await mark(episodes, value)
+    if (!value || episodes.length !== 1) return
+    const earlier = unwatchedBefore(episodes[0], latest.current.watched)
+    if (earlier.length === 0) return
+    showToast(
+      {
+        text: `Ook ${earlier.length === 1 ? 'de vorige aflevering' : `de ${earlier.length} eerdere afleveringen`} afvinken?`,
+        actionLabel: 'Ja, afvinken',
+        undo: () => mark(unwatchedBefore(episodes[0], latest.current.watched), true),
+      },
+      8000,
+    )
   }
 
   if (seasons.length === 0) {
@@ -99,6 +141,7 @@ export default function EpisodeTracker({
               Alles al gezien
             </button>
           )}
+          {nextAired && total > 1 && <UpTo item={item} seasons={seasons} next={next} onMark={markUpTo} />}
         </div>
       </div>
 
@@ -113,7 +156,7 @@ export default function EpisodeTracker({
             watched={watched}
             // Het seizoen waar je nu zit staat standaard open
             defaultOpen={seasons.length === 1 || next?.season_number === season.season_number}
-            onMark={mark}
+            onMark={tick}
             rating={item.season_ratings?.[season.season_number] ?? null}
             onRate={onRateSeason && ((value) => onRateSeason(season.season_number, value))}
             reviews={reviews}
@@ -367,6 +410,87 @@ function SeasonNote({ note, onSave }: { note: string | null; onSave: (note: stri
         className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
       />
     </div>
+  )
+}
+
+// "Tot hier gekeken": in één keer bijwerken tot een bepaalde aflevering, handig als je halverwege instapt
+function UpTo({
+  item,
+  seasons,
+  next,
+  onMark,
+}: {
+  item: WatchlistItem
+  seasons: SeasonInfo[]
+  next: EpisodeRef
+  onMark: (ref: EpisodeRef) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [season, setSeason] = useState(next.season_number)
+  const [episode, setEpisode] = useState(String(next.episode_number))
+  const max = seasons.find((s) => s.season_number === season)?.episode_count ?? 1
+  const number = Math.min(Math.max(1, Number(episode) || 1), max)
+  const ref = { season_number: season, episode_number: number }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="rounded-md border border-line px-4 py-2 text-sm text-muted hover:text-fg"
+      >
+        Tot hier gekeken…
+      </button>
+    )
+  }
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!isAired(item, ref)) return
+        void onMark(ref).then(() => setOpen(false))
+      }}
+      className="flex w-full flex-wrap items-center gap-2 rounded-md border border-line bg-surface p-2 text-sm"
+    >
+      <span className="text-muted">Gekeken t/m</span>
+      {seasons.length > 1 && (
+        <select
+          value={season}
+          onChange={(e) => setSeason(Number(e.target.value))}
+          aria-label="Seizoen"
+          className="rounded-md border border-line bg-panel px-2 py-1.5 outline-none focus:border-accent"
+        >
+          {seasons.map((s) => (
+            <option key={s.season_number} value={s.season_number}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      )}
+      <label className="flex items-center gap-1.5">
+        <span className="text-muted">afl.</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={max}
+          value={episode}
+          onChange={(e) => setEpisode(e.target.value)}
+          aria-label="Aflevering"
+          className="w-20 rounded-md border border-line bg-panel px-2 py-1.5 tabular-nums outline-none focus:border-accent"
+        />
+      </label>
+      <button
+        type="submit"
+        disabled={!isAired(item, ref)}
+        className="rounded-md bg-accent px-3 py-1.5 font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+      >
+        Afvinken
+      </button>
+      <button type="button" onClick={() => setOpen(false)} className="px-2 py-1.5 text-muted hover:text-fg">
+        Annuleren
+      </button>
+      {!isAired(item, ref) && <span className="w-full text-xs text-muted">Die aflevering is nog niet uitgezonden.</span>}
+    </form>
   )
 }
 

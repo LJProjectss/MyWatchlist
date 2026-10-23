@@ -1,7 +1,9 @@
 import { animeSeasons, animeTitles, englishTitle, fetchTmdbShow, parseJikanDuration, tmdb, totalEpisodes } from './catalog'
 import { jikan } from './jikan'
+import { jikanGenres, score } from './genres'
+import { withNewFields } from './schemaVersion'
 import { attempt, syncPending } from './offline'
-import { supabase } from './supabase'
+import { selectAll, supabase } from './supabase'
 import type { NextAir, SeasonInfo, WatchStatus, WatchlistItem } from './types'
 
 export interface EpisodeInfo {
@@ -31,21 +33,24 @@ export interface ShowInfo {
   seasons: SeasonInfo[] | null
   next_air: NextAir | null
   show_status: string | null
+  genres?: string[]
+  public_score?: number | null
 }
 
 // Actuele seizoensindeling en volgende uitzending ophalen; nieuwe afleveringen komen zo vanzelf in je lijst.
 export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
   if (item.source === 'tmdb') {
-    const { seasons, next_air, show_status, runtime } = await fetchTmdbShow(item.external_id)
-    return { seasons, next_air, show_status, runtime }
+    const { seasons, next_air, show_status, runtime, genres, public_score } = await fetchTmdbShow(item.external_id)
+    return { seasons, next_air, show_status, runtime, genres, public_score }
   }
 
   const { data } = await jikan<{ data: any }>(`anime/${item.external_id}`) // eslint-disable-line @typescript-eslint/no-explicit-any
   const airing = data.status === 'Currently Airing'
   const runtime = parseJikanDuration(data.duration)
   const titles = data.title ? animeTitles(data.title, englishTitle(data)) : undefined
+  const meta = { genres: jikanGenres(data.genres), public_score: score(data.score) }
   if (!airing) {
-    return { seasons: animeSeasons(data.episodes), next_air: null, show_status: data.status ?? null, runtime, titles }
+    return { seasons: animeSeasons(data.episodes), next_air: null, show_status: data.status ?? null, runtime, titles, ...meta }
   }
 
   // Bij lopende anime tellen we hoeveel afleveringen er al zijn; de volgende is dan de eerstvolgende uitzending
@@ -66,6 +71,7 @@ export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
     show_status: data.status,
     runtime,
     titles,
+    ...meta,
   }
 }
 
@@ -81,6 +87,8 @@ export async function refreshShowInfo(item: WatchlistItem, watched: Set<string>)
   if (JSON.stringify(info.next_air) !== JSON.stringify(item.next_air)) changes.next_air = info.next_air
   if (info.show_status !== item.show_status) changes.show_status = info.show_status
   if (info.runtime && info.runtime !== item.runtime) changes.runtime = info.runtime
+  if (info.genres && JSON.stringify(info.genres) !== JSON.stringify(item.genres)) changes.genres = info.genres
+  if (info.public_score !== undefined && info.public_score !== item.public_score) changes.public_score = info.public_score
   if (info.titles && (info.titles.title !== item.title || info.titles.original_title !== item.original_title)) {
     Object.assign(changes, info.titles)
   }
@@ -89,7 +97,7 @@ export async function refreshShowInfo(item: WatchlistItem, watched: Set<string>)
   if (item.status === 'completed' && nextEpisode(updated.seasons, watched) && isAired(updated, nextEpisode(updated.seasons, watched)!)) {
     changes.status = 'watching'
   }
-  await supabase.from('watchlist_items').update(changes).eq('id', item.id)
+  await supabase.from('watchlist_items').update(await withNewFields(changes, ['genres', 'public_score'])).eq('id', item.id)
   return changes
 }
 
@@ -177,12 +185,16 @@ export async function loadWatched(items: Pick<WatchlistItem, 'id' | 'current_wat
   // Eerst offline afgevinkte afleveringen versturen, anders lijken ze even verdwenen
   await syncPending()
   const currentWatch = new Map(items.map((i) => [i.id, i.current_watch ?? 1]))
-  const { data, error } = await supabase
-    .from('watched_episodes')
-    .select('item_id, watch_number, season_number, episode_number')
-    .in('item_id', items.map((i) => i.id))
-  if (error) throw new Error(error.message)
-  for (const row of data) {
+  // In stukken van 1000 ophalen. Bij een lange lijst niet op titel filteren (de adresregel wordt dan te lang);
+  // je ziet sowieso alleen je eigen afleveringen.
+  const ids = items.map((i) => i.id)
+  const rows = await selectAll<{ item_id: string; watch_number: number; season_number: number; episode_number: number }>(
+    'watched_episodes',
+    'id, item_id, watch_number, season_number, episode_number',
+    (query) => (ids.length === 1 ? query.eq('item_id', ids[0]) : ids.length <= 50 ? query.in('item_id', ids) : query),
+  )
+  for (const row of rows) {
+    if (!currentWatch.has(row.item_id)) continue
     if ((row.watch_number ?? 1) !== currentWatch.get(row.item_id)) continue
     if (!byItem.has(row.item_id)) byItem.set(row.item_id, new Set())
     byItem.get(row.item_id)!.add(epKey(row.season_number, row.episode_number))

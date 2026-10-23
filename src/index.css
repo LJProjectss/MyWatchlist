@@ -64,3 +64,12 @@ body {
   @apply bg-surface text-fg antialiased;
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
+
+/* iPhone zoomt in op invoervelden met tekst kleiner dan 16px; op telefoon daarom altijd 16px */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

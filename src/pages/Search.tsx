@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import AddDialog from '../components/AddDialog'
-import { searchJikan, searchTmdb, type CatalogResult } from '../lib/catalog'
-import { supabase } from '../lib/supabase'
+import { searchJikan, searchTmdb, seasonalAnime, trendingTmdb, type CatalogResult } from '../lib/catalog'
+import { selectAll } from '../lib/supabase'
 import { MEDIA_LABELS, type WatchlistItem } from '../lib/types'
 import { displayTitle, secondaryTitle } from '../lib/titles'
 
@@ -30,10 +30,12 @@ export default function Search() {
 
   // Welke titels staan al in de lijst? Dan tonen we een link in plaats van "Toevoegen".
   useEffect(() => {
-    supabase
-      .from('watchlist_items')
-      .select('id, source, media_type, external_id')
-      .then(({ data }) => setOwned(new Map((data ?? []).map((i) => [keyOf(i), i.id as string]))))
+    selectAll<{ id: string; source: string; media_type: string; external_id: string }>(
+      'watchlist_items',
+      'id, source, media_type, external_id',
+    )
+      .then((data) => setOwned(new Map(data.map((i) => [keyOf(i), i.id]))))
+      .catch(() => {})
   }, [])
 
   // Pas zoeken als je even stopt met typen
@@ -49,23 +51,34 @@ export default function Search() {
     return () => clearTimeout(timer)
   }, [input, query, params, setParams])
 
+  // Zonder zoekopdracht laten we zien wat er nu populair is
+  const animeSeason = params.get('seizoen') === 'volgend' ? 'upcoming' : 'now'
   useEffect(() => {
-    if (!query) {
-      setResults([])
-      setError(null)
-      return
-    }
     let cancelled = false
     setLoading(true)
     setError(null)
-    ;(catalog === 'anime' ? searchJikan(query) : searchTmdb(query))
+    const request = query
+      ? catalog === 'anime'
+        ? searchJikan(query)
+        : searchTmdb(query)
+      : catalog === 'anime'
+        ? seasonalAnime(animeSeason)
+        : trendingTmdb()
+    request
       .then((r) => !cancelled && setResults(r))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [query, catalog])
+  }, [query, catalog, animeSeason])
+
+  function switchSeason(which: 'now' | 'upcoming') {
+    const next = new URLSearchParams(params)
+    if (which === 'upcoming') next.set('seizoen', 'volgend')
+    else next.delete('seizoen')
+    setParams(next, { replace: true })
+  }
 
   function switchCatalog(key: Catalog) {
     const next = new URLSearchParams(params)
@@ -107,8 +120,40 @@ export default function Search() {
         />
       </div>
 
-      {loading && <p className="text-muted">Zoeken…</p>}
-      {error && <p className="text-bad">Zoeken mislukt: {error}</p>}
+      {!query && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-medium">
+            {catalog === 'tmdb'
+              ? 'Populair deze week'
+              : animeSeason === 'now'
+                ? 'Anime van dit seizoen'
+                : 'Anime van volgend seizoen'}
+          </h2>
+          {catalog === 'anime' && (
+            <div className="flex rounded-lg border border-line bg-panel p-1 text-sm">
+              {(
+                [
+                  ['now', 'Dit seizoen'],
+                  ['upcoming', 'Volgend seizoen'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => switchSeason(key)}
+                  className={`rounded-md px-3 py-1 transition ${
+                    animeSeason === key ? 'bg-accent text-white' : 'text-muted hover:text-fg'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {loading && <p className="text-muted">{query ? 'Zoeken…' : 'Laden…'}</p>}
+      {error && <p className="text-bad">{query ? 'Zoeken mislukt' : 'Laden mislukt'}: {error}</p>}
       {!loading && !error && query && results.length === 0 && (
         <p className="text-muted">Niets gevonden voor “{query}”.</p>
       )}

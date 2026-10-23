@@ -1,16 +1,7 @@
-import { supabase } from './supabase'
+import { selectAll, supabase } from './supabase'
 import { MEDIA_LABELS, STATUS_LABELS, type WatchlistItem } from './types'
 
-// Supabase geeft maximaal 1000 rijen per keer terug, dus we halen alles in stukken op
-async function fetchAll<T>(table: string): Promise<T[]> {
-  const rows: T[] = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from(table).select('*').range(from, from + 999)
-    if (error) throw new Error(error.message)
-    rows.push(...(data as T[]))
-    if (data.length < 1000) return rows
-  }
-}
+const fetchAll = <T,>(table: string) => selectAll<T>(table)
 
 export async function downloadJsonBackup() {
   const [items, episodes, history, reviews] = await Promise.all([

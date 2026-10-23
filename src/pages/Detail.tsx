@@ -14,7 +14,7 @@ import Credits from '../components/Credits'
 import Franchise from '../components/Franchise'
 import { externalLinks } from '../lib/catalog'
 import { hasEpisodes, loadWatched, refreshShowInfo } from '../lib/episodes'
-import { supabase } from '../lib/supabase'
+import { selectAll, supabase } from '../lib/supabase'
 import { isNetworkError, syncPending, updateItem } from '../lib/offline'
 import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchHistoryEntry, type WatchlistItem } from '../lib/types'
 import { loadHistory, recordCompletion } from '../lib/history'
@@ -23,10 +23,11 @@ import type { EpisodeRef } from '../lib/episodes'
 import { epKey } from '../lib/episodes'
 import type { EpisodeReview } from '../lib/types'
 import { displayTitle, secondaryTitle } from '../lib/titles'
+import { deleteItems, restoreItems } from '../lib/trash'
+import { showToast } from '../lib/toast'
 import {
   cacheItemChanges,
   cacheItemWatched,
-  cacheRemoveItem,
   getCachedItem,
   getCachedItems,
   getCachedWatched,
@@ -103,10 +104,9 @@ export default function Detail() {
 
   // Labels die je al eerder hebt gebruikt, als suggesties
   useEffect(() => {
-    supabase
-      .from('watchlist_items')
-      .select('tags')
-      .then(({ data }) => setAllTags([...new Set((data ?? []).flatMap((r) => r.tags ?? []))].sort()))
+    selectAll<{ tags: string[] | null }>('watchlist_items', 'id, tags')
+      .then((data) => setAllTags([...new Set(data.flatMap((r) => r.tags ?? []))].sort()))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -171,12 +171,13 @@ export default function Detail() {
   }
 
   async function handleDelete() {
-    if (!item || !confirm(`“${displayTitle(item)}” uit je lijst verwijderen?`)) return
-    const { error } = await supabase.from('watchlist_items').delete().eq('id', item.id)
-    if (error) setError(`Verwijderen mislukt: ${error.message}`)
-    else {
-      cacheRemoveItem(item.id)
+    if (!item) return
+    try {
+      const deleted = await deleteItems([item])
       navigate('/', { replace: true })
+      showToast({ text: `“${displayTitle(item)}” verwijderd`, undo: () => restoreItems(deleted) }, 10000)
+    } catch (e) {
+      setError(`Verwijderen mislukt: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 
@@ -220,6 +221,25 @@ export default function Detail() {
                 .filter(Boolean)
                 .join(' · ')}
             </p>
+            {(item.genres?.length || item.public_score) && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                {item.public_score && (
+                  <span className="mr-1 text-muted" title="Gemiddeld cijfer van alle kijkers">
+                    {item.source === 'jikan' ? 'MyAnimeList' : 'TMDB'}{' '}
+                    <span className="font-semibold text-fg">★ {formatRating(item.public_score)}</span>
+                  </span>
+                )}
+                {item.genres?.map((genre) => (
+                  <Link
+                    key={genre}
+                    to={`/?genre=${encodeURIComponent(genre)}`}
+                    className="rounded-full border border-line px-2 py-0.5 text-muted hover:border-accent/60 hover:text-fg"
+                  >
+                    {genre}
+                  </Link>
+                ))}
+              </div>
+            )}
             <div className="mt-2 flex gap-3 text-sm">
               {externalLinks(item).map((l) => (
                 <a key={l.label} href={l.href} target="_blank" rel="noreferrer" className="text-accent-hover hover:underline">

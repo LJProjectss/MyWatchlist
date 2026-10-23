@@ -3,6 +3,7 @@ import { fetchExtraDetails, type CatalogResult } from '../lib/catalog'
 import { cacheAddItem } from '../lib/cache'
 import { setEpisodesWatched } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
+import { withNewFields } from '../lib/schemaVersion'
 import { MEDIA_LABELS, type Priority, type WatchStatus, type WatchlistItem } from '../lib/types'
 import PriorityPicker from './PriorityPicker'
 import RatingPicker from './RatingPicker'
@@ -33,7 +34,7 @@ export default function AddDialog({
       const extra = await fetchExtraDetails(result)
       const { data, error } = await supabase
         .from('watchlist_items')
-        .insert({
+        .insert(await withNewFields({
           source: result.source,
           media_type: result.media_type,
           external_id: result.external_id,
@@ -46,10 +47,12 @@ export default function AddDialog({
           total_episodes: extra.total_episodes,
           seasons: extra.seasons,
           runtime: extra.runtime,
+          genres: extra.genres,
+          public_score: extra.public_score,
           status,
           rating: status === 'plan_to_watch' ? null : rating,
           priority: status === 'plan_to_watch' ? priority : null,
-        })
+        }, ['genres', 'public_score']))
         .select()
         .single()
       if (error) throw new Error(error.message)
