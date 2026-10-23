@@ -8,9 +8,12 @@ import TagEditor from '../components/TagEditor'
 import WatchHistory from '../components/WatchHistory'
 import WhereToWatch from '../components/WhereToWatch'
 import Trailer from '../components/Trailer'
+import Credits from '../components/Credits'
+import Franchise from '../components/Franchise'
 import { externalLinks } from '../lib/catalog'
 import { hasEpisodes, loadWatched, refreshShowInfo } from '../lib/episodes'
 import { supabase } from '../lib/supabase'
+import { isNetworkError, syncPending, updateItem } from '../lib/offline'
 import { averageSeasonRating, formatRating, MEDIA_LABELS, type WatchHistoryEntry, type WatchlistItem } from '../lib/types'
 import { loadHistory, recordCompletion } from '../lib/history'
 import { loadReviews, saveReview } from '../lib/reviews'
@@ -51,11 +54,12 @@ export default function Detail() {
   }, [item, watched])
 
   async function refreshEpisodes(loaded: WatchlistItem) {
-    let seen = new Set<string>()
+    // Offline: de onthouden voortgang gebruiken (inclusief wat je offline hebt afgevinkt)
+    let seen = getCachedWatched()?.get(loaded.id) ?? new Set<string>()
     try {
       seen = (await loadWatched([loaded])).get(loaded.id) ?? new Set()
     } catch (e) {
-      setError(`Afleveringen laden mislukt: ${e instanceof Error ? e.message : String(e)}`)
+      if (!isNetworkError(e)) setError(`Afleveringen laden mislukt: ${e instanceof Error ? e.message : String(e)}`)
     }
     setWatched(seen)
     // Nieuwe seizoenen, afleveringen en uitzenddata bijwerken; lukt dat niet, dan gebruiken we de opgeslagen gegevens
@@ -104,23 +108,27 @@ export default function Detail() {
   }, [])
 
   useEffect(() => {
-    supabase
-      .from('watchlist_items')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          // Offline of storing: dan blijft de onthouden versie staan
-          if (!getCachedItem(id)) setError(error.message)
+    void syncPending().finally(() =>
+      supabase
+        .from('watchlist_items')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (error) {
+            // Offline of storing: dan blijft de onthouden versie staan, ook met de afleveringen
+            const cached = getCachedItem(id)
+            if (!cached) setError(error.message)
+            else if (hasEpisodes(cached)) setWatched((w) => w ?? getCachedWatched()?.get(cached.id) ?? new Set())
+            setLoading(false)
+            return
+          }
+          setItem(data as WatchlistItem | null)
+          setNotes(data?.notes ?? '')
           setLoading(false)
-          return
-        }
-        setItem(data as WatchlistItem | null)
-        setNotes(data?.notes ?? '')
-        setLoading(false)
-        if (data && hasEpisodes(data)) refreshEpisodes(data as WatchlistItem)
-      })
+          if (data && hasEpisodes(data)) refreshEpisodes(data as WatchlistItem)
+        })
+    )
   }, [id])
 
   // Wijzigingen direct opslaan; bij een fout de oude waarde terugzetten
@@ -128,10 +136,11 @@ export default function Detail() {
     if (!item) return
     setItem((current) => (current ? { ...current, ...changes } : current))
     setError(null)
-    const { error } = await supabase.from('watchlist_items').update(changes).eq('id', item.id)
-    if (error) {
+    try {
+      await updateItem(item.id, changes)
+    } catch (e) {
       setItem((current) => (current ? { ...current, ...pick(item, changes) } : current))
-      setError(`Opslaan mislukt: ${error.message}`)
+      setError(`Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}`)
       return
     }
     // Nieuwe kijkbeurt: voortgang van die beurt laden (leeg bij opnieuw beginnen)
@@ -281,6 +290,8 @@ export default function Detail() {
 
           <Trailer item={item} />
 
+          <Credits item={item} />
+
           <section className="space-y-2">
             <h2 className="text-sm text-muted">Waar te kijken</h2>
             <WhereToWatch item={item} />
@@ -313,6 +324,8 @@ export default function Detail() {
           )}
         </section>
       )}
+
+      <Franchise item={item} />
     </div>
   )
 }

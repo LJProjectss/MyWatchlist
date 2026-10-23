@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { JIKAN, tmdb } from '../lib/catalog'
+import { tmdb } from '../lib/catalog'
+import { jikan } from '../lib/jikan'
 import type { WatchlistItem } from '../lib/types'
 
 interface Provider {
@@ -36,9 +37,9 @@ export default function WhereToWatch({ item }: { item: WatchlistItem }) {
         ? tmdb<{ results: Record<string, CountryProviders> }>(`${item.media_type}/${item.external_id}/watch/providers`).then(
             (r): State => ({ kind: 'tmdb', data: r.results[COUNTRY] ?? null }),
           )
-        : fetch(`${JIKAN}/anime/${item.external_id}/streaming`)
-            .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-            .then((r): State => ({ kind: 'jikan', links: r.data ?? [] }))
+        : jikan<{ data?: { name: string; url: string }[] }>(`anime/${item.external_id}/streaming`).then(
+            (r): State => ({ kind: 'jikan', links: r.data ?? [] }),
+          )
     load.then((s) => !cancelled && setState(s)).catch(() => !cancelled && setState({ kind: 'error' }))
     return () => {
       cancelled = true

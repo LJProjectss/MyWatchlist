@@ -20,6 +20,7 @@ import {
 import { cacheItems, cacheWatched, getCachedItems, getCachedWatched } from '../lib/cache'
 import { recordCompletion } from '../lib/history'
 import { supabase } from '../lib/supabase'
+import { syncPending, updateItem } from '../lib/offline'
 import { formatRating, MEDIA_LABELS, PRIORITY_LABELS, STATUS_LABELS, type Priority, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 import { displayTitle } from '../lib/titles'
 
@@ -83,27 +84,30 @@ export default function Watchlist() {
   }
 
   useEffect(() => {
-    supabase
-      .from('watchlist_items')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .then(async ({ data, error }) => {
-        if (error) {
-          // Met een onthouden lijst is een mislukte verversing geen reden om niets te tonen
-          if (!getCachedItems()) setError(error.message)
-        } else {
-          const loaded = data as WatchlistItem[]
-          setItems(loaded)
-          // Zonder afleveringsvoortgang werkt de lijst nog steeds, dus een fout hier negeren we
-          loadWatched(loaded.filter(hasEpisodes))
-            .then((map) => {
-              setWatched(map)
-              refreshInBackground(loaded, map)
-            })
-            .catch(() => {})
-        }
-        setLoading(false)
-      })
+    // Eerst offline gemaakte wijzigingen versturen, zodat de lijst daarna klopt
+    void syncPending().finally(() =>
+      supabase
+        .from('watchlist_items')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .then(async ({ data, error }) => {
+          if (error) {
+            // Met een onthouden lijst is een mislukte verversing geen reden om niets te tonen
+            if (!getCachedItems()) setError(error.message)
+          } else {
+            const loaded = data as WatchlistItem[]
+            setItems(loaded)
+            // Zonder afleveringsvoortgang werkt de lijst nog steeds, dus een fout hier negeren we
+            loadWatched(loaded.filter(hasEpisodes))
+              .then((map) => {
+                setWatched(map)
+                refreshInBackground(loaded, map)
+              })
+              .catch(() => {})
+          }
+          setLoading(false)
+        })
+    )
   }, [])
 
   const inProgress = useMemo(
@@ -121,7 +125,7 @@ export default function Watchlist() {
       await setEpisodesWatched(item, [next], true)
       const status = statusAfterProgress(item, countWatched(item.seasons, updated))
       if (status !== item.status) {
-        await supabase.from('watchlist_items').update({ status }).eq('id', item.id)
+        await updateItem(item.id, { status })
         if (status === 'completed') await recordCompletion(item.id).catch(() => {})
         setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)))
       }
@@ -131,7 +135,7 @@ export default function Watchlist() {
           await setEpisodesWatched(item, [next], false)
           setWatched((prev) => new Map(prev).set(item.id, seen))
           if (status !== item.status) {
-            await supabase.from('watchlist_items').update({ status: item.status }).eq('id', item.id)
+            await updateItem(item.id, { status: item.status })
             setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status: item.status } : i)))
           }
         },

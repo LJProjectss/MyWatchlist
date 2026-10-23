@@ -1,4 +1,6 @@
-import { animeSeasons, animeTitles, englishTitle, fetchTmdbShow, JIKAN, parseJikanDuration, tmdb, totalEpisodes } from './catalog'
+import { animeSeasons, animeTitles, englishTitle, fetchTmdbShow, parseJikanDuration, tmdb, totalEpisodes } from './catalog'
+import { jikan } from './jikan'
+import { attempt, syncPending } from './offline'
 import { supabase } from './supabase'
 import type { NextAir, SeasonInfo, WatchStatus, WatchlistItem } from './types'
 
@@ -38,9 +40,7 @@ export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
     return { seasons, next_air, show_status, runtime }
   }
 
-  const res = await fetch(`${JIKAN}/anime/${item.external_id}`)
-  if (!res.ok) throw new Error(`Jikan gaf foutcode ${res.status}`)
-  const { data } = await res.json()
+  const { data } = await jikan<{ data: any }>(`anime/${item.external_id}`) // eslint-disable-line @typescript-eslint/no-explicit-any
   const airing = data.status === 'Currently Airing'
   const runtime = parseJikanDuration(data.duration)
   const titles = data.title ? animeTitles(data.title, englishTitle(data)) : undefined
@@ -49,12 +49,10 @@ export async function fetchShowInfo(item: WatchlistItem): Promise<ShowInfo> {
   }
 
   // Bij lopende anime tellen we hoeveel afleveringen er al zijn; de volgende is dan de eerstvolgende uitzending
-  await pause()
   const first = await jikanEpisodePage(item.external_id, 1)
   const lastPage = first.pagination.last_visible_page
   let aired = first.data.length
   if (lastPage > 1) {
-    await pause()
     aired = (lastPage - 1) * 100 + (await jikanEpisodePage(item.external_id, lastPage)).data.length
   }
   return {
@@ -129,7 +127,6 @@ export async function fetchEpisodes(item: WatchlistItem, season: SeasonInfo): Pr
     episodes = data.episodes.map((e) => ({ episode_number: e.episode_number, name: e.name || null, air_date: e.air_date }))
   } else {
     for (let page = 1; ; page++) {
-      if (page > 1) await pause()
       const data = await jikanEpisodePage(item.external_id, page)
       episodes.push(
         ...data.data.map((e: { mal_id: number; title: string | null; aired: string | null }) => ({
@@ -150,14 +147,11 @@ export async function fetchEpisodes(item: WatchlistItem, season: SeasonInfo): Pr
   return episodes.sort((a, b) => a.episode_number - b.episode_number)
 }
 
-async function jikanEpisodePage(id: string, page: number) {
-  const res = await fetch(`${JIKAN}/anime/${id}/episodes?page=${page}`)
-  if (!res.ok) throw new Error(`Jikan gaf foutcode ${res.status}`)
-  return res.json()
+function jikanEpisodePage(id: string, page: number) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return jikan<any>(`anime/${id}/episodes?page=${page}`)
 }
 
-// Jikan staat maximaal 3 verzoeken per seconde toe
-const pause = () => new Promise((resolve) => setTimeout(resolve, 400))
 
 export function nextEpisode(seasons: SeasonInfo[] | null, watched: Set<string>): EpisodeRef | null {
   for (const season of seasons ?? []) {
@@ -180,6 +174,8 @@ export function countWatched(seasons: SeasonInfo[] | null, watched: Set<string>)
 export async function loadWatched(items: Pick<WatchlistItem, 'id' | 'current_watch'>[]) {
   const byItem = new Map<string, Set<string>>()
   if (items.length === 0) return byItem
+  // Eerst offline afgevinkte afleveringen versturen, anders lijken ze even verdwenen
+  await syncPending()
   const currentWatch = new Map(items.map((i) => [i.id, i.current_watch ?? 1]))
   const { data, error } = await supabase
     .from('watched_episodes')
@@ -194,14 +190,17 @@ export async function loadWatched(items: Pick<WatchlistItem, 'id' | 'current_wat
   return byItem
 }
 
+// Afvinken werkt ook offline: dan wordt het opgeslagen zodra je weer verbinding hebt
 export async function setEpisodesWatched(
   item: Pick<WatchlistItem, 'id' | 'current_watch'>,
   episodes: EpisodeRef[],
   watched: boolean,
 ) {
   if (episodes.length === 0) return
-  const itemId = item.id
-  const watchNumber = item.current_watch ?? 1
+  await attempt({ kind: 'episodes', itemId: item.id, watchNumber: item.current_watch ?? 1, episodes, watched })
+}
+
+export async function writeEpisodes(itemId: string, watchNumber: number, episodes: EpisodeRef[], watched: boolean) {
   if (watched) {
     const { error } = await supabase
       .from('watched_episodes')

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { JIKAN, tmdb } from '../lib/catalog'
+import { tmdb } from '../lib/catalog'
+import { jikan } from '../lib/jikan'
 import type { WatchlistItem } from '../lib/types'
 
 interface TmdbVideo {
@@ -21,16 +22,11 @@ async function findTrailer(item: Pick<WatchlistItem, 'source' | 'media_type' | '
     const best = results.filter((v) => v.site === 'YouTube' && ['Trailer', 'Teaser'].includes(v.type)).sort((a, b) => score(b) - score(a))[0]
     return best?.key ?? null
   }
-  // Jikan deelt de limiet met de andere verzoeken op deze pagina, dus even wachten en zo nodig nog eens proberen
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 1200 * (attempt + 1)))
-    const res = await fetch(`${JIKAN}/anime/${item.external_id}`)
-    if (res.status === 429) continue
-    if (!res.ok) return null
-    const trailer = (await res.json()).data?.trailer
-    return trailer?.youtube_id ?? trailer?.embed_url?.match(/embed\/([\w-]{11})/)?.[1] ?? null
-  }
-  return null
+  // Via de wachtrij, want deze pagina doet meer verzoeken aan MyAnimeList tegelijk
+  const { data } = await jikan<{ data: { trailer?: { youtube_id: string | null; embed_url: string | null } } }>(
+    `anime/${item.external_id}`,
+  )
+  return data.trailer?.youtube_id ?? data.trailer?.embed_url?.match(/embed\/([\w-]{11})/)?.[1] ?? null
 }
 
 export default function Trailer({ item }: { item: WatchlistItem }) {

@@ -1,3 +1,4 @@
+import { attempt } from './offline'
 import { supabase } from './supabase'
 import type { WatchHistoryEntry } from './types'
 
@@ -21,17 +22,21 @@ export async function deleteHistory(id: string) {
   if (error) throw new Error(error.message)
 }
 
-// Bij het afronden van een titel de datum van vandaag vastleggen (niet dubbel op dezelfde dag)
+// Bij het afronden de datum van vandaag vastleggen (niet dubbel op dezelfde dag); werkt ook offline
 export async function recordCompletion(itemId: string) {
-  const today = localDate()
-  const { data } = await supabase
+  await attempt({ kind: 'completion', itemId, date: localDate() })
+}
+
+export async function writeCompletion(itemId: string, date: string) {
+  const { data, error } = await supabase
     .from('watch_history')
     .select('id')
     .eq('item_id', itemId)
-    .eq('watched_on', today)
+    .eq('watched_on', date)
     .limit(1)
-  if (data && data.length > 0) return
-  await addHistory(itemId, today)
+  if (error) throw new Error(error.message)
+  if (data.length > 0) return
+  await addHistory(itemId, date)
 }
 
 export function localDate(date = new Date()) {

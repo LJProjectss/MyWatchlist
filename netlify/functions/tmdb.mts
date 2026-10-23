@@ -6,6 +6,10 @@ const ALLOWED_PATHS = [
   /^(movie|tv)\/\d+$/,
   /^tv\/\d+\/season\/\d+$/,
   /^(movie|tv)\/\d+\/(watch\/providers|recommendations|videos)$/,
+  /^movie\/\d+\/credits$/,
+  /^tv\/\d+\/aggregate_credits$/,
+  /^person\/\d+(\/combined_credits)?$/,
+  /^collection\/\d+$/,
 ]
 
 export default async (req: Request) => {

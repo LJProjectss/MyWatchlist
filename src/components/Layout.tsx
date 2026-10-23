@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
+import OfflineBanner from './OfflineBanner'
 import { databaseIsUpToDate } from '../lib/schemaVersion'
 import { useScrollRestoration } from '../lib/useScrollRestoration'
 
@@ -56,6 +57,8 @@ export default function Layout() {
           </NavLink>
         </div>
       </header>
+
+      <OfflineBanner />
 
       {outdated && (
         <div className="border-b border-amber-500/30 bg-amber-500/10">

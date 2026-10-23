@@ -9,6 +9,7 @@ import Search from './pages/Search'
 import Settings from './pages/Settings'
 import SharedList from './pages/SharedList'
 import Calendar from './pages/Calendar'
+import PersonPage from './pages/PersonPage'
 import SetupRequired from './pages/SetupRequired'
 import Stats from './pages/Stats'
 import Watchlist from './pages/Watchlist'
@@ -45,6 +46,7 @@ function AppRoutes() {
         <Route path="kalender" element={<Calendar />} />
         <Route path="zoeken" element={<Search />} />
         <Route path="titel/:id" element={<Detail />} />
+        <Route path="persoon/:source/:id" element={<PersonPage />} />
         <Route path="aanbevolen" element={<Recommendations />} />
         <Route path="statistieken" element={<Stats />} />
         <Route path="instellingen" element={<Settings />} />
