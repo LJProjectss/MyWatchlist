@@ -22,6 +22,10 @@ export interface WatchlistItem {
   season_ratings: Record<string, number> | null
   // Notitie per seizoensnummer
   season_notes: Record<string, string> | null
+  // Bij gestopt of gepauzeerd: waarom, sinds wanneer, en wanneer de app je eraan herinnert
+  pause_reason: string | null
+  paused_at: string | null
+  remind_at: string | null
   notes: string | null
   tags: string[]
   priority: Priority | null

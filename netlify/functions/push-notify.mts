@@ -84,6 +84,26 @@ export default async () => {
         if (await send(db, sub, { title: item.title, body: `Nieuwe aflevering: ${label}${ep.name ? ` – ${ep.name}` : ''}`, url: `/titel/${item.id}` })) sent++
       }
     }
+    // Herinneringen bij gepauzeerde of gestopte titels, 's ochtends (vanaf 07:00 UTC) op de gekozen dag
+    if (new Date().getUTCHours() >= 7) {
+      const { rows: due } = await db.query<{ id: string; user_id: string; title: string; status: string; pause_reason: string | null }>(`
+        update public.watchlist_items i set reminder_pushed_at = now()
+        where i.status in ('on_hold', 'dropped')
+          and i.remind_at <= current_date
+          and (i.reminder_pushed_at is null or i.reminder_pushed_at < i.remind_at)
+          and exists (select 1 from public.push_subscriptions s where s.user_id = i.user_id)
+        returning i.id, i.user_id, i.title, i.status, i.pause_reason`)
+      for (const item of due) {
+        const { rows: subs } = await db.query<Subscription>(
+          'select id, endpoint, p256dh, auth from public.push_subscriptions where user_id = $1',
+          [item.user_id],
+        )
+        const verb = item.status === 'dropped' ? 'gestopt' : 'gepauzeerd'
+        const body = `Je was ${verb}${item.pause_reason ? ` (“${item.pause_reason}”)` : ''}. Zin om het opnieuw te proberen?`
+        for (const sub of subs) if (await send(db, sub, { title: item.title, body, url: `/titel/${item.id}` })) sent++
+      }
+    }
+
     console.log(`[push] ${items.length} gevolgde titels gecontroleerd, ${sent} meldingen verstuurd.`)
   } finally {
     await db.end().catch(() => {})

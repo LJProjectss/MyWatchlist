@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import ContinueWatching from '../components/ContinueWatching'
 import Upcoming from '../components/Upcoming'
+import Reminders from '../components/Reminders'
 import ProgressBar from '../components/ProgressBar'
 import { totalEpisodes } from '../lib/catalog'
 import {
@@ -115,6 +116,16 @@ export default function Watchlist() {
     [items],
   )
 
+  async function changeReminder(item: WatchlistItem, changes: Partial<WatchlistItem>) {
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...changes } : i)))
+    try {
+      await updateItem(item.id, changes)
+    } catch (e) {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? item : i)))
+      showToast({ text: `Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}` })
+    }
+  }
+
   async function markNext(item: WatchlistItem) {
     const seen = watched.get(item.id) ?? new Set<string>()
     const next = nextEpisode(item.seasons, seen)
@@ -184,6 +195,7 @@ export default function Watchlist() {
 
       <ContinueWatching items={inProgress} watched={watched} onMarkNext={markNext} />
       <Upcoming items={items} />
+      <Reminders items={items} onChange={changeReminder} />
 
       {items.length > 0 && (
         <div className={`grid grid-cols-2 gap-2 lg:flex ${allTags.length ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>

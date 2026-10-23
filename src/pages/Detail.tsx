@@ -8,6 +8,8 @@ import TagEditor from '../components/TagEditor'
 import WatchHistory from '../components/WatchHistory'
 import WhereToWatch from '../components/WhereToWatch'
 import Trailer from '../components/Trailer'
+import PauseInfo from '../components/PauseInfo'
+import { PAUSED, statusChanges } from '../lib/reminders'
 import Credits from '../components/Credits'
 import Franchise from '../components/Franchise'
 import { externalLinks } from '../lib/catalog'
@@ -229,8 +231,10 @@ export default function Detail() {
 
           <section className="space-y-2">
             <h2 className="text-sm text-muted">Status</h2>
-            <StatusPicker value={item.status} onChange={(status) => update({ status })} />
+            <StatusPicker value={item.status} onChange={(status) => update(statusChanges(item, status))} />
           </section>
+
+          {PAUSED.includes(item.status) && <PauseInfo key={item.status} item={item} onChange={update} />}
 
           {item.status === 'plan_to_watch' && (
             <section className="space-y-2">
