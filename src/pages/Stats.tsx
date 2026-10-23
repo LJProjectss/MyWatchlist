@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import WatchTime from '../components/WatchTime'
 import { getCachedItems } from '../lib/cache'
 import { supabase } from '../lib/supabase'
+import { loadItems } from '../lib/items'
 import { formatRating, MEDIA_LABELS, STATUS_LABELS, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 import { displayTitle } from '../lib/titles'
 
@@ -12,10 +13,7 @@ export default function Stats() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase
-      .from('watchlist_items')
-      .select('*')
-      .then(({ data, error }) => {
+    loadItems().then(({ data, error }) => {
         if (error) {
           if (!getCachedItems()) setError(error.message)
           return
@@ -40,6 +38,24 @@ export default function Stats() {
   const distribution = Array.from({ length: 10 }, (_, i) => rated.filter((r) => Math.round(r.rating!) === i + 1).length)
   const maxCount = Math.max(1, ...distribution)
   const top = [...rated].sort((a, b) => b.rating! - a.rating! || displayTitle(a).localeCompare(displayTitle(b), 'nl')).slice(0, 5)
+
+  // Genres: hoe vaak ze voorkomen en welk cijfer je ze gemiddeld geeft
+  const genreRows = [...new Set(items.flatMap((i) => i.genres ?? []))]
+    .map((genre) => {
+      const list = items.filter((i) => i.genres?.includes(genre))
+      return { label: genre, count: list.length, note: `gem. ${average(list)}` }
+    })
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'nl'))
+    .slice(0, 10)
+
+  // Jouw cijfer naast het gemiddelde van TMDB of MyAnimeList
+  const compared = rated
+    .filter((i) => i.public_score)
+    .map((i) => ({ item: i, diff: Math.round((i.rating! - i.public_score!) * 10) / 10 }))
+  const averageDiff = compared.length ? compared.reduce((sum, c) => sum + c.diff, 0) / compared.length : 0
+  const byDiff = [...compared].sort((a, b) => b.diff - a.diff)
+  const fan = byDiff.filter((c) => c.diff >= 1).slice(0, 3)
+  const critic = byDiff.filter((c) => c.diff <= -1).reverse().slice(0, 3)
 
   return (
     <div className="space-y-8">
@@ -74,6 +90,34 @@ export default function Stats() {
           />
         </Panel>
       </div>
+
+      {(genreRows.length > 0 || compared.length > 0) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {genreRows.length > 0 && (
+            <Panel title="Favoriete genres">
+              <BarList rows={genreRows} />
+            </Panel>
+          )}
+          {compared.length > 0 && (
+            <Panel title="Jij vs. het publiek">
+              <p className="text-sm">
+                {Math.abs(averageDiff) < 0.25 ? (
+                  <>Je cijfers liggen gemiddeld dicht bij die van TMDB en MyAnimeList.</>
+                ) : (
+                  <>
+                    Je geeft gemiddeld{' '}
+                    <span className="font-semibold">{formatRating(Math.round(Math.abs(averageDiff) * 10) / 10)}</span>{' '}
+                    punt {averageDiff > 0 ? 'hoger' : 'lager'} dan TMDB en MyAnimeList.
+                  </>
+                )}{' '}
+                <span className="text-muted">({compared.length} titels vergeleken)</span>
+              </p>
+              <DiffList title="Jij bent een groter fan" rows={fan} />
+              <DiffList title="Jij bent minder onder de indruk" rows={critic} />
+            </Panel>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Verdeling van je cijfers">
@@ -128,6 +172,31 @@ export default function Stats() {
           )}
         </Panel>
       </div>
+    </div>
+  )
+}
+
+function DiffList({ title, rows }: { title: string; rows: { item: WatchlistItem; diff: number }[] }) {
+  if (rows.length === 0) return null
+  return (
+    <div className="space-y-1.5">
+      <h3 className="text-sm text-muted">{title}</h3>
+      <ul className="space-y-1.5">
+        {rows.map(({ item, diff }) => (
+          <li key={item.id} className="flex items-center gap-3 text-sm">
+            <Link to={`/titel/${item.id}`} className="min-w-0 flex-1 truncate hover:underline">
+              {displayTitle(item)}
+            </Link>
+            <span className="shrink-0 text-muted tabular-nums">
+              <span className="text-star">★ {formatRating(item.rating!)}</span> vs {formatRating(item.public_score!)}
+            </span>
+            <span className={`w-10 shrink-0 text-right tabular-nums ${diff > 0 ? 'text-good' : 'text-bad'}`}>
+              {diff > 0 ? '+' : '−'}
+              {formatRating(Math.abs(diff))}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

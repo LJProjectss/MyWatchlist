@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import ContinueWatching from '../components/ContinueWatching'
 import Upcoming from '../components/Upcoming'
 import Reminders from '../components/Reminders'
 import ProgressBar from '../components/ProgressBar'
-import { totalEpisodes } from '../lib/catalog'
+import { fetchGenres, totalEpisodes } from '../lib/catalog'
 import {
   countWatched,
   epKey,
@@ -20,14 +20,22 @@ import {
 } from '../lib/episodes'
 import { cacheItems, cacheWatched, getCachedItems, getCachedWatched } from '../lib/cache'
 import { recordCompletion } from '../lib/history'
+import { loadItems } from '../lib/items'
 import { supabase } from '../lib/supabase'
+import { databaseIsUpToDate } from '../lib/schemaVersion'
 import { syncPending, updateItem } from '../lib/offline'
 import { formatRating, MEDIA_LABELS, PRIORITY_LABELS, STATUS_LABELS, type Priority, type MediaType, type WatchStatus, type WatchlistItem } from '../lib/types'
 import { displayTitle } from '../lib/titles'
+import { showToast } from '../lib/toast'
+import { deleteItems, restoreItems, type DeletedItems } from '../lib/trash'
+import { statusChanges } from '../lib/reminders'
+import BulkBar from '../components/BulkBar'
 
 type TypeFilter = MediaType | 'all'
 type StatusFilter = WatchStatus | 'all'
 type SortKey = keyof typeof SORTS
+
+const FILTER_COLUMNS: Record<number, string> = { 3: 'sm:grid-cols-3', 4: 'sm:grid-cols-4', 5: 'sm:grid-cols-5' }
 
 const PRIORITY_DOT: Record<Priority, string> = { 1: 'bg-rose-400', 2: 'bg-sky-400', 3: 'bg-slate-400' }
 
@@ -57,6 +65,7 @@ export default function Watchlist() {
   const defaultSort: SortKey = statusFilter === 'plan_to_watch' ? 'priority' : 'recent'
   const sort = (params.get('sorteer') && params.get('sorteer')! in SORTS ? params.get('sorteer') : defaultSort) as SortKey
   const tagFilter = params.get('label') ?? 'all'
+  const genreFilter = params.get('genre') ?? 'all'
   const text = params.get('zoek') ?? ''
 
   function setParam(key: string, value: string, defaultValue: string) {
@@ -84,14 +93,21 @@ export default function Watchlist() {
     }
   }
 
+  // Genres en publieksscore ophalen voor titels die er al stonden voordat de app dat bijhield
+  async function fillGenres(loaded: WatchlistItem[]) {
+    if (!(await databaseIsUpToDate())) return
+    for (const item of loaded.filter((i) => i.genres === null).slice(0, 40)) {
+      const changes = await fetchGenres(item).catch(() => null)
+      if (!changes) continue
+      const { error } = await supabase.from('watchlist_items').update(changes).eq('id', item.id)
+      if (!error) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...changes } : i)))
+    }
+  }
+
   useEffect(() => {
     // Eerst offline gemaakte wijzigingen versturen, zodat de lijst daarna klopt
     void syncPending().finally(() =>
-      supabase
-        .from('watchlist_items')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .then(async ({ data, error }) => {
+      loadItems().then(async ({ data, error }) => {
           if (error) {
             // Met een onthouden lijst is een mislukte verversing geen reden om niets te tonen
             if (!getCachedItems()) setError(error.message)
@@ -100,15 +116,30 @@ export default function Watchlist() {
             setItems(loaded)
             // Zonder afleveringsvoortgang werkt de lijst nog steeds, dus een fout hier negeren we
             loadWatched(loaded.filter(hasEpisodes))
-              .then((map) => {
+              .then(async (map) => {
                 setWatched(map)
-                refreshInBackground(loaded, map)
+                await refreshInBackground(loaded, map)
               })
               .catch(() => {})
+              .finally(() => fillGenres(loaded))
           }
           setLoading(false)
         })
     )
+  }, [])
+
+  // Verwijderd en daarna ongedaan gemaakt (ook vanaf de titelpagina): meteen weer tonen
+  useEffect(() => {
+    function restored(e: Event) {
+      const { items: back } = (e as CustomEvent<DeletedItems>).detail
+      const ids = new Set(back.map((i) => i.id))
+      setItems((prev) => [...back, ...prev.filter((i) => !ids.has(i.id))].sort(SORTS.recent.compare))
+      void loadWatched(back.filter(hasEpisodes)).then((map) =>
+        setWatched((prev) => new Map([...prev, ...map])),
+      ).catch(() => {})
+    }
+    window.addEventListener('items-restored', restored)
+    return () => window.removeEventListener('items-restored', restored)
   }, [])
 
   const inProgress = useMemo(
@@ -157,13 +188,90 @@ export default function Watchlist() {
     }
   }
 
-  // Korte melding onderin, met de mogelijkheid om een afgevinkte aflevering terug te draaien
-  const [toast, setToast] = useState<{ text: string; undo?: () => Promise<void> } | null>(null)
-  const toastTimer = useRef<number | undefined>(undefined)
-  function showToast(next: { text: string; undo?: () => Promise<void> }) {
-    setToast(next)
-    window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), 5000)
+  // Posters of een compacte lijst; onthouden op dit apparaat
+  const [view, setView] = useState<'grid' | 'list'>(() => {
+    try {
+      return localStorage.getItem('list-view') === 'list' ? 'list' : 'grid'
+    } catch {
+      return 'grid'
+    }
+  })
+  function changeView(next: 'grid' | 'list') {
+    setView(next)
+    try {
+      localStorage.setItem('list-view', next)
+    } catch {
+      // niet onthouden, geen probleem
+    }
+  }
+
+  // Meerdere titels tegelijk aanpassen: null = niet aan het selecteren
+  const [selected, setSelected] = useState<Set<string> | null>(null)
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      if (!prev) return prev
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function bulkChange(chosen: WatchlistItem[], changesFor: (item: WatchlistItem) => Partial<WatchlistItem>, text: string) {
+    const before = new Map(chosen.map((i) => [i.id, i]))
+    const all = chosen.map((i) => [i, changesFor(i)] as const)
+    setItems((prev) => prev.map((i) => (before.has(i.id) ? { ...i, ...all.find(([c]) => c.id === i.id)![1] } : i)))
+    try {
+      for (const [item, changes] of all) {
+        await updateItem(item.id, changes)
+        if (changes.status === 'completed' && item.status !== 'completed') await recordCompletion(item.id).catch(() => {})
+      }
+      showToast({
+        text,
+        undo: async () => {
+          for (const item of chosen) {
+            await updateItem(item.id, pick(item, changesFor(item)))
+          }
+          setItems((prev) => prev.map((i) => before.get(i.id) ?? i))
+        },
+      })
+    } catch (e) {
+      setItems((prev) => prev.map((i) => before.get(i.id) ?? i))
+      showToast({ text: `Opslaan mislukt: ${e instanceof Error ? e.message : String(e)}` })
+    }
+  }
+
+  function bulkStatus(chosen: WatchlistItem[], status: WatchStatus) {
+    const count = chosen.length
+    return bulkChange(
+      chosen,
+      (item) => statusChanges(item, status),
+      `${count} ${count === 1 ? 'titel' : 'titels'} op “${STATUS_LABELS[status]}” gezet`,
+    )
+  }
+
+  function bulkTag(chosen: WatchlistItem[], tag: string, add: boolean) {
+    const count = chosen.length
+    return bulkChange(
+      chosen,
+      (item) => ({
+        tags: add ? [...new Set([...(item.tags ?? []), tag])] : (item.tags ?? []).filter((t) => t !== tag),
+      }),
+      `Label “${tag}” ${add ? 'toegevoegd aan' : 'verwijderd van'} ${count} ${count === 1 ? 'titel' : 'titels'}`,
+    )
+  }
+
+  async function bulkDelete(chosen: WatchlistItem[]) {
+    const count = chosen.length
+    try {
+      const deleted = await deleteItems(chosen)
+      const ids = new Set(chosen.map((i) => i.id))
+      setItems((prev) => prev.filter((i) => !ids.has(i.id)))
+      setSelected(new Set())
+      showToast({ text: `${count} ${count === 1 ? 'titel' : 'titels'} verwijderd`, undo: () => restoreItems(deleted) }, 10000)
+    } catch (e) {
+      showToast({ text: `Verwijderen mislukt: ${e instanceof Error ? e.message : String(e)}` })
+    }
   }
 
   const visible = useMemo(() => {
@@ -174,23 +282,64 @@ export default function Watchlist() {
           (typeFilter === 'all' || i.media_type === typeFilter) &&
           (statusFilter === 'all' || i.status === statusFilter) &&
           (tagFilter === 'all' || (i.tags ?? []).includes(tagFilter)) &&
+          (genreFilter === 'all' || (i.genres ?? []).includes(genreFilter)) &&
           (!needle || `${i.title} ${i.original_title ?? ''}`.toLocaleLowerCase('nl').includes(needle)),
       )
       .sort(SORTS[sort].compare)
-  }, [items, typeFilter, statusFilter, tagFilter, sort, text])
+  }, [items, typeFilter, statusFilter, tagFilter, genreFilter, sort, text])
 
   const allTags = useMemo(() => [...new Set(items.flatMap((i) => i.tags ?? []))].sort(), [items])
+  const allGenres = useMemo(
+    () => [...new Set(items.flatMap((i) => i.genres ?? []))].sort((a, b) => a.localeCompare(b, 'nl')),
+    [items],
+  )
 
   const filtered = visible.length !== items.length
+  // Soort, status en sorteren staan er altijd; genres en labels alleen als je die hebt
+  const selectCount = 3 + (allGenres.length ? 1 : 0) + (allTags.length ? 1 : 0)
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Mijn lijst</h1>
-        <p className="text-sm text-muted">
-          {filtered ? `${visible.length} van ` : ''}
-          {items.length} {items.length === 1 ? 'titel' : 'titels'}
-        </p>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Mijn lijst</h1>
+          <p className="text-sm text-muted">
+            {filtered ? `${visible.length} van ` : ''}
+            {items.length} {items.length === 1 ? 'titel' : 'titels'}
+          </p>
+        </div>
+        {items.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => (selected ? setSelected(null) : setSelected(new Set()))}
+              aria-pressed={selected !== null}
+              className={`rounded-md border px-3 py-1.5 text-sm transition ${
+                selected ? 'border-accent bg-accent text-white' : 'border-line text-muted hover:text-fg'
+              }`}
+            >
+              {selected ? 'Klaar' : 'Selecteren'}
+            </button>
+            <div className="flex rounded-md border border-line p-0.5" role="group" aria-label="Weergave">
+              {(
+                [
+                  ['grid', 'Posters', GridIcon],
+                  ['list', 'Lijst', RowsIcon],
+                ] as const
+              ).map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  onClick={() => changeView(key)}
+                  aria-pressed={view === key}
+                  aria-label={label}
+                  title={label}
+                  className={`rounded px-2 py-1 transition ${view === key ? 'bg-panel-hover text-fg' : 'text-muted hover:text-fg'}`}
+                >
+                  <Icon />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <ContinueWatching items={inProgress} watched={watched} onMarkNext={markNext} />
@@ -198,7 +347,7 @@ export default function Watchlist() {
       <Reminders items={items} onChange={changeReminder} />
 
       {items.length > 0 && (
-        <div className={`grid grid-cols-2 gap-2 lg:flex ${allTags.length ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+        <div className={`grid grid-cols-2 gap-2 lg:flex ${FILTER_COLUMNS[selectCount]}`}>
           <input
             type="search"
             value={text}
@@ -216,6 +365,13 @@ export default function Watchlist() {
             onChange={(v) => setParam('status', v, 'all')}
             options={[['all', 'Elke status'], ...Object.entries(STATUS_LABELS)]}
           />
+          {allGenres.length > 0 && (
+            <Select
+              value={genreFilter}
+              onChange={(v) => setParam('genre', v, 'all')}
+              options={[['all', 'Alle genres'], ...allGenres.map((g): [string, string] => [g, g])]}
+            />
+          )}
           {allTags.length > 0 && (
             <Select
               value={tagFilter}
@@ -227,9 +383,21 @@ export default function Watchlist() {
             value={sort}
             onChange={(v) => setParam('sorteer', v, defaultSort)}
             options={Object.entries(SORTS).map(([key, { label }]) => [key, label])}
-            className={allTags.length ? '' : 'col-span-2 sm:col-span-1'}
+            className={selectCount % 2 ? 'col-span-2 sm:col-span-1' : ''}
           />
         </div>
+      )}
+
+      {selected && (
+        <BulkBar
+          items={items.filter((i) => selected.has(i.id))}
+          allTags={allTags}
+          allSelected={visible.length > 0 && visible.every((i) => selected.has(i.id))}
+          onSelectAll={(all) => setSelected(all ? new Set(visible.map((i) => i.id)) : new Set())}
+          onStatus={bulkStatus}
+          onTag={bulkTag}
+          onDelete={bulkDelete}
+        />
       )}
 
       {loading && <p className="text-muted">Laden…</p>}
@@ -248,19 +416,20 @@ export default function Watchlist() {
         </div>
       )}
 
-      {visible.length > 0 && (
+      {visible.length > 0 && view === 'grid' && (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {visible.map((item) => (
             <li key={item.id}>
-              <Link
-                to={`/titel/${item.id}`}
-                className="block h-full overflow-hidden rounded-lg border border-line bg-panel transition hover:border-accent/60"
-              >
+              <ItemLink item={item} selected={selected} onToggle={toggleSelected} className="block h-full overflow-hidden rounded-lg border bg-panel transition">
                 <div className="relative aspect-[2/3] bg-panel-hover">
                   {item.poster_url && (
                     <img src={item.poster_url} alt="" loading="lazy" className="size-full object-cover" />
                   )}
-                  <QuickTick item={item} watched={watched.get(item.id)} onTick={() => markNext(item)} />
+                  {selected ? (
+                    <SelectMark checked={selected.has(item.id)} className="absolute top-2 left-2" />
+                  ) : (
+                    <QuickTick item={item} watched={watched.get(item.id)} onTick={() => markNext(item)} />
+                  )}
                 </div>
                 <div className="space-y-1 p-3">
                   <p className="line-clamp-2 text-sm font-medium leading-snug">{displayTitle(item)}</p>
@@ -276,23 +445,60 @@ export default function Watchlist() {
                     />
                   )}
                   <div className="flex items-center justify-between pt-1 text-xs">
-                    <span className="flex items-center gap-1.5 text-muted">
-                      {item.status === 'plan_to_watch' && item.priority && (
-                        <span
-                          className={`size-2 rounded-full ${PRIORITY_DOT[item.priority]}`}
-                          title={`Prioriteit: ${PRIORITY_LABELS[item.priority]}`}
-                        />
-                      )}
-                      {STATUS_LABELS[item.status]}
-                    </span>
+                    <StatusLabel item={item} />
                     {item.rating && <span className="font-semibold text-star">★ {formatRating(item.rating)}</span>}
                   </div>
                 </div>
-              </Link>
+              </ItemLink>
             </li>
           ))}
         </ul>
       )}
+
+      {visible.length > 0 && view === 'list' && (
+        <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-panel">
+          {visible.map((item) => {
+            const seen = watched.get(item.id)
+            const total = totalEpisodes(item.seasons) ?? 0
+            return (
+              <li key={item.id}>
+                <ItemLink item={item} selected={selected} onToggle={toggleSelected} className="flex items-center gap-3 border-0 px-3 py-2">
+                  {selected && <SelectMark checked={selected.has(item.id)} />}
+                  <div className="aspect-[2/3] w-10 shrink-0 overflow-hidden rounded bg-panel-hover">
+                    {item.poster_url && <img src={item.poster_url} alt="" loading="lazy" className="size-full object-cover" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{displayTitle(item)}</p>
+                    <p className="truncate text-xs text-muted">
+                      {item.status === 'plan_to_watch' && item.priority && (
+                        <span
+                          className={`mr-1.5 inline-block size-2 rounded-full align-middle ${PRIORITY_DOT[item.priority]}`}
+                          title={`Prioriteit: ${PRIORITY_LABELS[item.priority]}`}
+                        />
+                      )}
+                      {[
+                        STATUS_LABELS[item.status],
+                        hasEpisodes(item) && seen && total > 0 ? `${countWatched(item.seasons, seen)}/${total}` : null,
+                        MEDIA_LABELS[item.media_type],
+                        item.year,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  </div>
+                  {!selected && (
+                    <QuickTick item={item} watched={seen} onTick={() => markNext(item)} inline />
+                  )}
+                  <span className="w-10 shrink-0 text-right text-sm font-semibold text-star tabular-nums">
+                    {item.rating ? `★ ${formatRating(item.rating)}` : ''}
+                  </span>
+                </ItemLink>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
 
       {!loading && items.length > 0 && visible.length === 0 && (
         <div className="space-y-2">
@@ -303,26 +509,6 @@ export default function Watchlist() {
         </div>
       )}
 
-      {toast && (
-        <div
-          role="status"
-          className="fixed inset-x-4 bottom-24 z-30 mx-auto flex max-w-md items-center gap-3 rounded-lg border border-line bg-panel px-4 py-3 text-sm shadow-lg md:bottom-6"
-        >
-          <span className="min-w-0 flex-1">{toast.text}</span>
-          {toast.undo && (
-            <button
-              onClick={() => {
-                const undo = toast.undo!
-                setToast(null)
-                undo().catch(() => showToast({ text: 'Ongedaan maken mislukt.' }))
-              }}
-              className="shrink-0 font-medium text-accent-hover hover:underline"
-            >
-              Ongedaan maken
-            </button>
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -332,10 +518,12 @@ function QuickTick({
   item,
   watched,
   onTick,
+  inline = false,
 }: {
   item: WatchlistItem
   watched: Set<string> | undefined
   onTick: () => void
+  inline?: boolean
 }) {
   if (item.status !== 'watching' || !hasEpisodes(item) || !watched) return null
   const next = nextEpisode(item.seasons, watched)
@@ -349,7 +537,9 @@ function QuickTick({
         onTick()
       }}
       aria-label={`${episodeLabel(item, next)} van ${displayTitle(item)} als gekeken markeren`}
-      className="absolute right-2 bottom-2 flex items-center gap-1 rounded-full bg-accent px-3 py-2 text-xs font-semibold text-white shadow-lg ring-2 ring-surface/60 active:scale-95"
+      className={`flex shrink-0 items-center gap-1 rounded-full bg-accent px-3 text-xs font-semibold text-white active:scale-95 ${
+        inline ? 'py-1.5' : 'py-2 absolute right-2 bottom-2 shadow-lg ring-2 ring-surface/60'
+      }`}
     >
       ✓ {episodeLabel(item, next)}
     </button>
@@ -379,5 +569,87 @@ function Select({
         </option>
       ))}
     </select>
+  )
+}
+
+// Een titel in de lijst: opent de titel, of selecteert hem als je aan het selecteren bent
+function ItemLink({
+  item,
+  selected,
+  onToggle,
+  className,
+  children,
+}: {
+  item: WatchlistItem
+  selected: Set<string> | null
+  onToggle: (id: string) => void
+  className: string
+  children: ReactNode
+}) {
+  const isSelected = selected?.has(item.id) ?? false
+  if (selected) {
+    return (
+      <button
+        type="button"
+        onClick={() => onToggle(item.id)}
+        aria-pressed={isSelected}
+        className={`w-full text-left ${className} ${isSelected ? 'border-accent ring-2 ring-accent/60' : 'border-line'}`}
+      >
+        {children}
+      </button>
+    )
+  }
+  return (
+    <Link to={`/titel/${item.id}`} className={`${className} border-line hover:border-accent/60 hover:bg-panel-hover/40`}>
+      {children}
+    </Link>
+  )
+}
+
+function SelectMark({ checked, className = '' }: { checked: boolean; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+        checked ? 'border-accent bg-accent text-white' : 'border-white/80 bg-black/30 text-transparent'
+      } ${className}`}
+    >
+      ✓
+    </span>
+  )
+}
+
+function StatusLabel({ item }: { item: WatchlistItem }) {
+  return (
+    <span className="flex items-center gap-1.5 text-muted">
+      {item.status === 'plan_to_watch' && item.priority && (
+        <span className={`size-2 rounded-full ${PRIORITY_DOT[item.priority]}`} title={`Prioriteit: ${PRIORITY_LABELS[item.priority]}`} />
+      )}
+      {STATUS_LABELS[item.status]}
+    </span>
+  )
+}
+
+// De oude waarden van precies de velden die we wijzigden, om ongedaan te maken
+function pick(item: WatchlistItem, changes: Partial<WatchlistItem>): Partial<WatchlistItem> {
+  return Object.fromEntries(Object.keys(changes).map((key) => [key, item[key as keyof WatchlistItem]]))
+}
+
+function GridIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1" />
+    </svg>
+  )
+}
+
+function RowsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
+    </svg>
   )
 }

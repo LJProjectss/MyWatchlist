@@ -10,6 +10,7 @@ import Settings from './pages/Settings'
 import SharedList from './pages/SharedList'
 import Calendar from './pages/Calendar'
 import PersonPage from './pages/PersonPage'
+import NewPassword from './pages/NewPassword'
 import SetupRequired from './pages/SetupRequired'
 import Stats from './pages/Stats'
 import Watchlist from './pages/Watchlist'
@@ -50,6 +51,7 @@ function AppRoutes() {
         <Route path="aanbevolen" element={<Recommendations />} />
         <Route path="statistieken" element={<Stats />} />
         <Route path="instellingen" element={<Settings />} />
+        <Route path="nieuw-wachtwoord" element={<NewPassword />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

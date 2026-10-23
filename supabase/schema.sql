@@ -57,6 +57,9 @@ alter table public.watchlist_items add column if not exists pause_reason text;
 alter table public.watchlist_items add column if not exists paused_at timestamptz;
 alter table public.watchlist_items add column if not exists remind_at date;
 alter table public.watchlist_items add column if not exists reminder_pushed_at timestamptz;
+-- Genres (in het Nederlands) en het gemiddelde cijfer bij TMDB of MyAnimeList
+alter table public.watchlist_items add column if not exists genres text[];
+alter table public.watchlist_items add column if not exists public_score numeric(3, 1);
 
 create table if not exists public.watched_episodes (
   id              uuid primary key default gen_random_uuid(),
@@ -91,7 +94,7 @@ create index if not exists watch_history_item_idx on public.watch_history (item_
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
 declare
-  auto_fields text[] := array['seasons', 'total_episodes', 'next_air', 'show_status', 'info_refreshed_at', 'runtime', 'reminder_pushed_at', 'updated_at'];
+  auto_fields text[] := array['seasons', 'total_episodes', 'next_air', 'show_status', 'info_refreshed_at', 'runtime', 'reminder_pushed_at', 'genres', 'public_score', 'updated_at'];
 begin
   if (to_jsonb(new) - auto_fields) = (to_jsonb(old) - auto_fields) then
     new.updated_at = old.updated_at;
@@ -216,7 +219,7 @@ create table if not exists public.app_meta (
 alter table public.app_meta enable row level security;
 drop policy if exists "iedereen mag lezen" on public.app_meta;
 create policy "iedereen mag lezen" on public.app_meta for select using (true);
-insert into public.app_meta (key, value) values ('schema_version', '6')
+insert into public.app_meta (key, value) values ('schema_version', '7')
   on conflict (key) do update set value = excluded.value;
 
 -- Supabase de nieuwe kolommen direct laten zien (anders soms "schema cache"-fouten)

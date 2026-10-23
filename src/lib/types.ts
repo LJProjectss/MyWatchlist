@@ -34,6 +34,9 @@ export interface WatchlistItem {
   show_status: string | null
   info_refreshed_at: string | null
   runtime: number | null
+  // Genres (Nederlands) en het gemiddelde cijfer bij TMDB of MyAnimeList; null = nog niet opgehaald
+  genres: string[] | null
+  public_score: number | null
   created_at: string
   updated_at: string
 }

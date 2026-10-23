@@ -1,4 +1,7 @@
 import type { MediaType, NextAir, SeasonInfo, Source } from './types'
+import { supabase } from './supabase'
+import { jikan } from './jikan'
+import { jikanGenres, score, tmdbGenres } from './genres'
 
 // Zoekresultaat uit TMDB of Jikan, in één vorm zodat de UI het verschil niet hoeft te kennen.
 export interface CatalogResult {
@@ -13,13 +16,19 @@ export interface CatalogResult {
   total_episodes: number | null
   subtype: string | null
   runtime?: number | null
+  // Alleen bekend bij anime uit de zoekresultaten; anders halen we ze op bij het toevoegen
+  genres?: string[]
+  public_score?: number | null
 }
 
 const TMDB_IMAGE = 'https://image.tmdb.org/t/p/w342'
 export const JIKAN = 'https://api.jikan.moe/v4'
 
 export async function tmdb<T>(path: string, params: Record<string, string> = {}): Promise<T> {
-  const res = await fetch(`/api/tmdb/${path}?${new URLSearchParams(params)}`)
+  // Alleen ingelogde gebruikers mogen via onze site bij TMDB
+  const { data } = await supabase.auth.getSession()
+  const headers: Record<string, string> = data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {}
+  const res = await fetch(`/api/tmdb/${path}?${new URLSearchParams(params)}`, { headers })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
     throw new Error(body?.error ?? body?.status_message ?? `TMDB gaf foutcode ${res.status}`)
@@ -77,6 +86,8 @@ interface JikanAnime {
   year: number | null
   aired?: { from: string | null }
   synopsis: string | null
+  genres?: { name: string }[]
+  score?: number | null
   images: { webp?: { large_image_url?: string }; jpg?: { large_image_url?: string; image_url?: string } }
 }
 
@@ -86,9 +97,13 @@ export async function searchJikan(query: string): Promise<CatalogResult[]> {
   if (!res.ok) throw new Error(`Jikan gaf foutcode ${res.status}`)
   const data: { data: JikanAnime[] } = await res.json()
 
+  return mapJikanResults(data.data)
+}
+
+function mapJikanResults(list: JikanAnime[]): CatalogResult[] {
   // Jikan geeft soms dubbele resultaten terug
   const seen = new Set<number>()
-  return data.data
+  return list
     .filter((a) => !seen.has(a.mal_id) && seen.add(a.mal_id))
     .map((a) => {
       return {
@@ -102,8 +117,24 @@ export async function searchJikan(query: string): Promise<CatalogResult[]> {
         total_episodes: a.episodes,
         subtype: a.type,
         runtime: parseJikanDuration(a.duration),
+        ...(a.genres ? { genres: jikanGenres(a.genres), public_score: score(a.score) } : {}),
       }
     })
+}
+
+// Ontdekken: wat deze week populair is bij TMDB
+export async function trendingTmdb(): Promise<CatalogResult[]> {
+  const data = await tmdb<{ results: TmdbSearchItem[] }>('trending/all/week')
+  return mapTmdbResults(data.results)
+}
+
+// Ontdekken: anime van dit seizoen of het volgende, populairste eerst
+export async function seasonalAnime(which: 'now' | 'upcoming'): Promise<CatalogResult[]> {
+  const res = await fetch(`${JIKAN}/seasons/${which}?${new URLSearchParams({ sfw: 'true', limit: '24' })}`)
+  if (res.status === 429) throw new Error('MyAnimeList is even te druk. Probeer het over een paar seconden opnieuw.')
+  if (!res.ok) throw new Error(`Jikan gaf foutcode ${res.status}`)
+  const data: { data: (JikanAnime & { members?: number })[] } = await res.json()
+  return mapJikanResults(data.data.sort((a, b) => (b.members ?? 0) - (a.members ?? 0)))
 }
 
 // Extra gegevens die niet in de zoekresultaten zitten, zoals de IMDb-ID en het aantal afleveringen.
@@ -112,24 +143,54 @@ export async function fetchExtraDetails(result: CatalogResult) {
     let episodes = result.total_episodes
     let runtime = result.runtime ?? null
     let titles = { title: result.title, original_title: result.original_title }
-    // Aanbevelingen van Jikan bevatten geen Engelse titel, aantal afleveringen of speelduur; dan halen we die los op
-    if (episodes === null || runtime === null || !result.original_title) {
+    let genres = result.genres ?? null
+    let public_score = result.public_score ?? null
+    // Aanbevelingen van Jikan bevatten geen Engelse titel, aantal afleveringen, genres of speelduur; dan halen we die los op
+    if (episodes === null || runtime === null || !result.original_title || genres === null) {
       const res = await fetch(`${JIKAN}/anime/${result.external_id}`)
       if (res.ok) {
         const data = (await res.json()).data
         episodes = data?.episodes ?? episodes
         runtime = parseJikanDuration(data?.duration) ?? runtime
         if (data?.title) titles = animeTitles(data.title, englishTitle(data))
+        if (data?.genres) genres = jikanGenres(data.genres)
+        public_score = score(data?.score) ?? public_score
       }
     }
-    return { imdb_id: null, total_episodes: episodes, seasons: animeSeasons(episodes), runtime, ...titles }
+    return { imdb_id: null, total_episodes: episodes, seasons: animeSeasons(episodes), runtime, ...titles, genres, public_score }
   }
   if (result.media_type === 'movie') {
-    const movie = await tmdb<{ imdb_id: string | null; runtime: number | null }>(`movie/${result.external_id}`)
-    return { imdb_id: movie.imdb_id, total_episodes: null, seasons: null, runtime: movie.runtime || null }
+    const movie = await tmdb<{ imdb_id: string | null; runtime: number | null; genres?: { id: number }[]; vote_average?: number }>(
+      `movie/${result.external_id}`,
+    )
+    return {
+      imdb_id: movie.imdb_id,
+      total_episodes: null,
+      seasons: null,
+      runtime: movie.runtime || null,
+      genres: tmdbGenres(movie.genres),
+      public_score: score(movie.vote_average),
+    }
   }
   const tv = await fetchTmdbShow(result.external_id)
-  return { imdb_id: tv.imdb_id, total_episodes: totalEpisodes(tv.seasons), seasons: tv.seasons, runtime: tv.runtime }
+  return {
+    imdb_id: tv.imdb_id,
+    total_episodes: totalEpisodes(tv.seasons),
+    seasons: tv.seasons,
+    runtime: tv.runtime,
+    genres: tv.genres,
+    public_score: tv.public_score,
+  }
+}
+
+// Genres en publieksscore voor een titel die al in je lijst staat (voor titels van vóór deze functie)
+export async function fetchGenres(item: { source: Source; media_type: MediaType; external_id: string }) {
+  if (item.source === 'jikan') {
+    const { data } = await jikan<{ data: { genres?: { name: string }[]; score?: number | null } }>(`anime/${item.external_id}`)
+    return { genres: jikanGenres(data.genres), public_score: score(data.score) }
+  }
+  const data = await tmdb<{ genres?: { id: number }[]; vote_average?: number }>(`${item.media_type}/${item.external_id}`)
+  return { genres: tmdbGenres(data.genres), public_score: score(data.vote_average) }
 }
 
 interface TmdbShow {
@@ -139,6 +200,8 @@ interface TmdbShow {
   next_episode_to_air?: { season_number: number; episode_number: number; air_date: string | null; runtime?: number | null } | null
   last_episode_to_air?: { runtime?: number | null } | null
   episode_run_time?: number[]
+  genres?: { id: number }[]
+  vote_average?: number
 }
 
 export async function fetchTmdbShow(id: string) {
@@ -153,7 +216,15 @@ export async function fetchTmdbShow(id: string) {
     : null
   // Speelduur per aflevering: TMDB vult episode_run_time niet altijd meer, dan de laatste aflevering
   const runtime = tv.episode_run_time?.[0] || tv.last_episode_to_air?.runtime || next?.runtime || null
-  return { imdb_id: tv.external_ids?.imdb_id ?? null, seasons, next_air, show_status: tv.status ?? null, runtime }
+  return {
+    imdb_id: tv.external_ids?.imdb_id ?? null,
+    seasons,
+    next_air,
+    show_status: tv.status ?? null,
+    runtime,
+    genres: tmdbGenres(tv.genres),
+    public_score: score(tv.vote_average),
+  }
 }
 
 export function animeSeasons(episodes: number | null): SeasonInfo[] | null {

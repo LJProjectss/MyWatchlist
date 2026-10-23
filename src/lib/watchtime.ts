@@ -1,5 +1,5 @@
 import { fetchTmdbShow, JIKAN, parseJikanDuration, tmdb } from './catalog'
-import { supabase } from './supabase'
+import { selectAll } from './supabase'
 import type { WatchlistItem } from './types'
 
 export interface WatchSession {
@@ -17,15 +17,7 @@ interface HistoryRow {
   watched_on: string
 }
 
-async function fetchAll<T>(table: string, columns: string): Promise<T[]> {
-  const rows: T[] = []
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from(table).select(columns).range(from, from + 999)
-    if (error) throw new Error(error.message)
-    rows.push(...(data as T[]))
-    if (data.length < 1000) return rows
-  }
-}
+const fetchAll = <T,>(table: string, columns: string) => selectAll<T>(table, columns)
 
 // Elke bekeken aflevering telt (ook bij herkijken); films tellen per keer in de kijkgeschiedenis.
 // Een film op "gekeken" zonder datum telt één keer mee, op de dag dat hij laatst is bijgewerkt.

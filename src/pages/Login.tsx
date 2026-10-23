@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 
-type Mode = 'login' | 'signup'
+type Mode = 'login' | 'signup' | 'reset'
 
 export default function Login() {
   const [mode, setMode] = useState<Mode>('login')
@@ -16,7 +16,13 @@ export default function Login() {
     setBusy(true)
     setError(null)
     setInfo(null)
-    if (mode === 'login') {
+    if (mode === 'reset') {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/nieuw-wachtwoord`,
+      })
+      if (error) setError(translateError(error.message))
+      else setInfo('Als er een account bij dit adres hoort, staat er nu een mail met een link om een nieuw wachtwoord te kiezen.')
+    } else if (mode === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) setError(translateError(error.message))
     } else {
@@ -52,18 +58,33 @@ export default function Login() {
               className="w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-accent"
             />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-sm text-muted">Wachtwoord</span>
-            <input
-              type="password"
-              required
-              minLength={6}
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-accent"
-            />
-          </label>
+          {mode !== 'reset' && (
+            <label className="block space-y-1.5">
+              <span className="text-sm text-muted">Wachtwoord</span>
+              <input
+                type="password"
+                required
+                minLength={6}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-md border border-line bg-surface px-3 py-2 outline-none focus:border-accent"
+              />
+            </label>
+          )}
+          {mode === 'login' && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode('reset')
+                setError(null)
+                setInfo(null)
+              }}
+              className="-mt-2 text-sm text-accent-hover hover:underline"
+            >
+              Wachtwoord vergeten?
+            </button>
+          )}
 
           {error && <p className="text-sm text-bad">{error}</p>}
           {info && <p className="text-sm text-good">{info}</p>}
@@ -73,12 +94,12 @@ export default function Login() {
             disabled={busy}
             className="w-full rounded-md bg-accent py-2 font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
           >
-            {mode === 'login' ? 'Inloggen' : 'Account aanmaken'}
+            {mode === 'login' ? 'Inloggen' : mode === 'signup' ? 'Account aanmaken' : 'Stuur resetlink'}
           </button>
         </form>
 
         <p className="mt-4 text-center text-sm text-muted">
-          {mode === 'login' ? 'Nog geen account?' : 'Al een account?'}{' '}
+          {mode === 'login' ? 'Nog geen account?' : mode === 'signup' ? 'Al een account?' : 'Weet je het weer?'}{' '}
           <button
             onClick={() => {
               setMode(mode === 'login' ? 'signup' : 'login')

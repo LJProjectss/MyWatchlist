@@ -4,7 +4,7 @@ import { cacheItems, getCachedItems, getCachedWatched } from '../lib/cache'
 import { followed, loadWeek, weekDays, weekStart, type CalendarEntry } from '../lib/calendar'
 import { episodeLabel, loadWatched } from '../lib/episodes'
 import { localDate } from '../lib/history'
-import { supabase } from '../lib/supabase'
+import { loadItems } from '../lib/items'
 import { displayTitle } from '../lib/titles'
 import type { WatchlistItem } from '../lib/types'
 
@@ -18,11 +18,7 @@ export default function Calendar() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase
-      .from('watchlist_items')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .then(async ({ data, error }) => {
+    loadItems().then(async ({ data, error }) => {
         if (error) {
           if (!getCachedItems()) setError(error.message)
           return

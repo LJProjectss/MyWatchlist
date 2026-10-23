@@ -2,7 +2,7 @@
 
 Een webapp om films, series en anime bij te houden die je hebt gekeken, ze een cijfer van 1 tot 10 te geven en per aflevering te zien waar je bent gebleven. Gegevens komen van TMDB (films en series) en Jikan (MyAnimeList).
 
-Wat de app kan: zoeken en toevoegen, cijfers (ook per seizoen), afleveringen afvinken, *Verder kijken* en *Binnenkort* met uitzenddata, waar je iets kunt streamen in Nederland, labels en een Wil ik zien-lijst met prioriteit, kijkgeschiedenis en herkijken, aanbevelingen, statistieken. Je kunt de app installeren op je telefoon (Safari: Deel → Zet op beginscherm; Chrome: App installeren).
+Wat de app kan: zoeken en toevoegen (met *Populair deze week* en anime van dit seizoen), cijfers (ook per seizoen), afleveringen afvinken (ook in één keer *tot hier*), *Verder kijken* en *Binnenkort* met uitzenddata, waar je iets kunt streamen in Nederland, labels en een Wil ik zien-lijst met prioriteit, genres, meerdere titels tegelijk aanpassen, posters of compacte lijst, kijkgeschiedenis en herkijken, aanbevelingen, statistieken (ook jouw cijfer naast dat van TMDB/MyAnimeList). Je kunt de app installeren op je telefoon (Safari: Deel → Zet op beginscherm; Chrome: App installeren).
 
 Gebouwd met React, Vite, Tailwind CSS en Supabase (inloggen en database). Bedoeld om te draaien op Netlify.
 
@@ -31,7 +31,7 @@ Gebouwd met React, Vite, Tailwind CSS en Supabase (inloggen en database). Bedoel
 2. Kopieer het **API Read Access Token** (de lange sleutel) en zet het in Netlify onder **Environment variables** als `TMDB_API_TOKEN`.
 3. Start een nieuwe deploy.
 
-De sleutel blijft geheim: de browser praat met een Netlify Function (`netlify/functions/tmdb.mts`), die TMDB aanroept. Anime komt van [Jikan](https://jikan.moe) (MyAnimeList) en heeft geen sleutel nodig.
+De sleutel blijft geheim: de browser praat met een Netlify Function (`netlify/functions/tmdb.mts`), die TMDB aanroept. Die functie werkt alleen voor ingelogde gebruikers; daarvoor leest hij `VITE_SUPABASE_URL` en `VITE_SUPABASE_ANON_KEY`, dus laat bij die twee variabelen de scope **Functions** aanstaan (standaard staat alles aan). Anime komt van [Jikan](https://jikan.moe) (MyAnimeList) en heeft geen sleutel nodig.
 
 ## Automatische database-updates
 
